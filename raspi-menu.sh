@@ -2,7 +2,7 @@
 
 # VERSION=0.0.1
 HOME=/home/pi
-UPDATE_MENU_URL="https://www.ietf.org/rfc/rfc3339.txt"   # <------------ TODO
+UPDATE_MENU_URL=
 SCRIPT_PATH=$HOME/scripts/raspi-menu.sh
 OPENBOX_AUTOSTART=/etc/xdg/openbox/autostart
 BASH_PROFILE=$HOME/.bash_profile
@@ -247,12 +247,14 @@ changeSiteURL() {
 				# remove the last line of bash_profile and add to start startx
 				sudo sed -i '/&& \/bin\/bash/d' $BASH_PROFILE
 				echo "[[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]] && startx -- -nocursor" > $BASH_PROFILE
-				
+				# remove the line of openbox to start this config-menu file
+				sudo sed -i '/raspi-menu.sh/d' $OPENBOX_AUTOSTART 
+
 				# remove the last chromium's URL and add the correct one
 				CURRENT_URL="https://www.smeup.com"
 				SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_URL" 3>&1 1>&2 2>&3)
-				echo "SITE=$SITE" >> $OPENBOX_AUTOSTART
-				echo "chromium-browser --disable-translate --incognito --disable-infobars --disable-restore-session-state --disable- session-crashed-bubble --kiosk \$SITE &" >> $OPENBOX_AUTOSTART
+				sudo echo "SITE=$SITE" >> $OPENBOX_AUTOSTART
+				sudo echo "chromium-browser --disable-translate --incognito --disable-infobars --disable-restore-session-state --disable- session-crashed-bubble --kiosk \$SITE &" >> $OPENBOX_AUTOSTART
 				NEW_SITE=$SITE
 			else
 				# extract the old site
@@ -267,7 +269,8 @@ changeSiteURL() {
 				#echo "sed -i 's/\"exited_cleanly\":false/\"exited_cleanly\":true/; s/\"exit_type\":\"[^\"]\+\"/\"exit_type\":\"Normal\"/' $HOME/.config/chromium/Default/Preferences" >> $OPENBOX_AUTOSTART
 				#echo "SITE=$SITE"
 				#echo "chromium-browser --disable-translate --incognito --disable-infobars --disable-restore-session-state --disable- session-crashed-bubble --kiosk \$SITE &" >> $OPENBOX_AUTOSTART
-				sudo sed -i 's/^\(\s*SITE=\s*\).*/\1'$SITE'/' $OPENBOX_AUTOSTART
+				SITE=$(sed -e 's/[&\\/]/\\&/g; s/$/\\/' -e '$s/\\$//' <<<"$SITE")
+				sudo sed -i 's/^\(\s*SITE=\s*\).*/\1'"$SITE"'/' $OPENBOX_AUTOSTART
 				NEW_SITE=$SITE
 			fi
 			
@@ -293,7 +296,7 @@ updateSystem() {
     while read -r line; do
         i=$(( $i + 1 ))
         echo $i
-    done < <(apt-get update)
+    done < <(sudo apt -y update 2>/dev/null)
   } | whiptail --title "Progress" --gauge "Please wait while system search updating" 6 60 0
 
   {
@@ -302,7 +305,7 @@ updateSystem() {
     while read -r line; do
         i=$(( $i + 1 ))
         echo $i
-    done < <(apt -y upgrade)
+    done < <(sudo apt -y upgrade 2>/dev/null)
   } | whiptail --title "Progress" --gauge "Please wait while system install update" 6 60 0
 
 	{
@@ -311,7 +314,7 @@ updateSystem() {
     while read -r line; do
         i=$(( i + 1 ))
         echo $i
-    done < <(rpi-update)
+    done < <(sudo rpi-update -y 2>/dev/null)
   } | whiptail --title "Progress" --gauge "Please wait while updating your RPI firmware and kernel" 6 60 0
 
   goToMainMenu
