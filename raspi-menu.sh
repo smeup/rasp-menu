@@ -1,20 +1,34 @@
 #! /bin/bash
 
-# VERSION=0.0.1
-HOME=/home/pi
+VERSION=0.0.1
+USER=
+HOME=/home/"$USER"
 UPDATE_MENU_URL=
-SCRIPT_PATH=$HOME/scripts/raspi-menu.sh
+SCRIPT_PATH="$HOME"/scripts/raspi-menu.sh
 OPENBOX_AUTOSTART=/etc/xdg/openbox/autostart
-BASH_PROFILE=$HOME/.bash_profile
-BASH_RC=$HOME/.bashrc
+BASH_PROFILE="$HOME"/.bash_profile
+BASH_RC="$HOME"/.bashrc
+BACKUP_DIR="$HOME"/.backup
 
 clear
 
-# TODO
-sudo localectl set-keymap it
-sudo localectl set-locale LANG=it_IT.utf8
-sudo timedatectl set-timezone Europe/Rome
+checkBackupDir() {
+	if [ ! -f "$BACKUP_DIR" ];
+	then
+	 createBackupFile
+	fi
+}
 
+createBackupFile() {
+	sudo mkdir -p "$BACKUP_DIR"
+	cp "$SCRIPT_PATH" "$BACKUP_DIR"
+	sudo cp "$OPENBOX_AUTOSTART" "$BACKUP_DIR"
+	sudo cp "$BASH_PROFILE" "$BACKUP_DIR"
+	sudo cp "$BASH_RC" "$BACKUP_DIR"
+	sudo cp "/etc/network/interfaces" "$BACKUP_DIR"
+	sudo cp "/etc/wpa_supplicant/wpa_supplicant.conf" "$BACKUP_DIR"
+	sudo cp "/etc/dhcpcd.conf" "$BACKUP_DIR"
+}
 
 calc_windows_size() {
   LINES=17
@@ -164,12 +178,6 @@ writeConfigInterface() { # (type,ssid,passw)
 
 testConnection() {
 	ping -c 3 "www.google.com"
-	if [ $? = 0 ];
-	then
-		whiptail --title "Test Connection" --msgbox "The configuration was OK.\nThe connection work correctly." 8 78
-	else
-		whiptail --title "Test Connection" --msgbox "Test failed\nThe connection not work correctly." 8 78
-	fi
 }
 
 setIPNetwork() {
@@ -193,11 +201,11 @@ setIPNetwork() {
 
 	# Search if was just configured the interface but exclude the line that starts with '#'
 	$(grep "iface $INTERFACE" "$INTERFACE_FILE" | grep -v "#")
-	if [ $? = 0 ];
+	if [ $? -eq 0 ];
 	then
 		
 		whiptail --yesno "Attention! The interface is already set.\nClear and reinsert it?" --title "" 10 60 2
-		if [ $? = 0 ];
+		if [ $? -eq 0 ];
 		then
 			# findAndRemoveInterface
 			sudo sed -i "/\b\(iface $INTERFACE\|auto $INTRFACE\|allow-hotplug $INTERFACE\|#wpa_supplicant_$INTERFACE\)\b/d" $INTERFACE_FILE
@@ -207,17 +215,17 @@ setIPNetwork() {
 	fi
 
 	whiptail --yesno "What type of interface you selected?" --title "Set Network interface" --yes-button "Ethernet" --no-button "Wi-fi" 10 60 2
-	if [ $? = 0 ];
+	if [ $? -eq 0 ];
 	then
 			writeConfigInterface 0
 	else
 			local SSID_NAME=$(whiptail --inputbox "Insert a SSID of the Wi-fi (Wi-fi name)" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
-			if [ $? = 1 ]; # exitstatus
+			if [ $? -eq 1 ]; # exitstatus
 			then
 				goToMainMenu
 			fi
-			local PASSWORD=$(whiptail --passwordbox "Insert a passphrase of Wi-fi" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
-			if [ $? = 1 ]; # exitstatus
+			local PASSWORD=$(whiptail --inputbox "Insert a passphrase of Wi-fi" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
+			if [ $? -eq 1 ]; # exitstatus
 			then
 				goToMainMenu
 			fi
@@ -226,11 +234,59 @@ setIPNetwork() {
 	fi
 	/etc/init.d/networking restart
 	testConnection
+	if [ $? -eq 0 ];
+	then
+		whiptail --title "Test Connection" --msgbox "The configuration was OK.\nThe connection work correctly." 8 78
+	else
+		whiptail --title "Test Connection" --msgbox "Test failed\nThe connection not work correctly." 8 78
+	fi
 	goToMainMenu
 }
 
 setCrontab() {
-	echo ""
+	CMD=$?
+	if [ $CMD = "" ];
+	then
+		CMD=$(whiptail --inputbox "Please enter a valid command" 20 60 3>&1 1>&2 2>&3)
+	fi
+
+	if [ $? != 0 ];
+	then
+		goToMainMenu 
+	fi
+
+	whiptail --msgbox "\
+		Please note: \n
+		the five fields specify how often and when to execute a command: \
+		\n\n# .---------------- [m]inute: 0 - 59 \  
+		\n# |  .------------- [h]our: 0 - 23 \
+		\n# |  |  .---------- [d]ay of month: 1 - 31 \
+		\n# |  |  |  .------- [mon]th: 1 - 12 \
+		\n# |  |  |  |  .---- [w]eek day: 0 - 6 (sunday=0) \
+		\n# |  |  |  |  | \
+		\n# *  *  *  *  * \
+		" 20 70 1
+
+	DEF_TIME="* * * * *"
+	DEF_TIME=$(whiptail --inputbox "Please enter a valid frequency" 20 60 "$DEF_TIME" 3>&1 1>&2 2>&3)
+	
+	(crontab -l 2>/dev/null; echo "$DEF_TIME $CMD" ) | crontab -
+
+	CMD=""
+	#(crontab -l 2>/dev/null; echo "*/5 * * * * /path/to/job -with args") | crontab -
+	#crontab -l -u user | cat - filename | crontab -u user -
+ 	#crontab -l -u user; echo 'crontab spec'; } | crontab -u user -
+}
+
+schedulerMenu() {
+	SCH_TIT='Set scheduler configuration'
+  declare -a SCH_ARR=(
+		'<--- ' 'Back to Main Menu'
+		'2.1' 'Add a RESTART scheduler'
+		'2.2' 'Add a POWEROFF scheduler' 
+		'2.3' 'Add a custom scheduler'
+	);
+	drawMenu "$SCH_TIT" "${SCH_ARR[@]}"
 }
 
 changeSiteURL() {
@@ -240,7 +296,7 @@ changeSiteURL() {
 		if [ -f "$BASH_RC" ] && [ -e "$BASH_PROFILE" ];
 		then
 			grep -q "SITE=" $OPENBOX_AUTOSTART
-			if [ ! $? = 0 ];
+			if [ ! $? -eq 0 ];
 			then
 				# remove the line of bashrc to start this config-menu file
 				sudo sed -i '/raspi-menu.sh/d' $BASH_RC 
@@ -321,14 +377,34 @@ updateSystem() {
 } 
 
 updateMenuVersion() {
- cd $SCRIPT_PATH
- wget -q $UPDATE_MENU_URL -O $SCRIPT_PATH | whiptail --title "Progress" --gauge "Please wait while download update script..." 6 60 0
- if [ $? = 0 ];
- then
-	whiptail --msgbox "Procedure for updating menu terminated sucessfully." 20 60 1
- else
- 	whiptail --msgbox "Error in procedure for updating menu." 20 60 1
- fi
+	local CURRENTVERSION=$(grep -m1 "VERSION=" $SCRIPT_PATH)
+	local GITHUBVERSION=$(curl -s $UPDATE_MENU_URL/version)
+
+	testConnection
+	if [ $? -eq 0 ];
+	then
+		if [ "$CURRENTVERSION" == "$GITHUBVERSION" ]; then
+			whiptail --msgbox "Tool is up to date" 20 60 1
+		else
+			whiptail --yesno "A new version of this tool is available, download it now?" --title "Update Menu" 10 60 2
+			if [ $? -eq 0 ]; 
+			then
+
+				wget -q $UPDATE_MENU_URL -P "$SCRIPT_PATH""_new"
+				if [ -f "$SCRIPT_PATH""_new" ];
+				then
+					cp "$SCRIPT_PATH" "$SCRIPT_PATH""_old"
+					rm "$SCRIPT_PATH"
+					mv "$SCRIPT_PATH""_new" "$SCRIPT_PATH" 
+					chmod +x "$SCRIPT_PATH"
+					exec "$SCRIPT_PATH"
+				fi
+			else
+				goToMainMenu
+			fi		
+	else
+		whiptail --msgbox "Update failed! No connection!" 20 60 1
+	fi
  goToMainMenu
 }
 
@@ -343,7 +419,7 @@ info() {
 
 checkHowExit() {
 	whiptail --yesno "For take changes raspberry must will reboot. Would you like to reboot now?" 20 60 2
-	if [ $? = 1 ];
+	if [ $? -eq 1 ];
 	then
 		sync
 		exit 0
@@ -358,7 +434,7 @@ setExit() {
 	if [ -z "${NEW_SITE// }" ] || ( [ $NEW_SITE = $OLD_SITE ] && [ ! -z "${NEW_SITE// }" ] );
 		then
 			whiptail --yesno "For use raspberry in kios-mode you MUST change the default URL in menu\n\nDo you want to leave without abilitate a Kiosk mode?" 20 60
-			if [ $? = 0 ];
+			if [ $? -eq 0 ];
 			then
 				goToMainMenu
 			else
@@ -369,7 +445,20 @@ setExit() {
 	fi
 }
 
+reset() {
+	if [ -f "BACKUP_DIR" ];
+	then
+		yes | sudo cp -rf "$BACKUP_DIR""/autostart" "$OPENBOX_AUTOSTART"
+		yes | sudo cp -rf "$BACKUP_DIR""/.bash_profile" "$BASH_PROFILE"
+		yes | sudo cp -rf "$BACKUP_DIR""/.bashrc" "$BASH_RC"
+		yes | sudo cp -rf "$BACKUP_DIR""/interfaces" "/etc/network/interfaces"
+		yes | sudo cp -rf "$BACKUP_DIR""/wpa_supplicant.conf" "/etc/wpa_supplicant/wpa_supplicant.conf"
+		yes | sudo cp -rf "$BACKUP_DIR""/dhcpcd.conf" "/etc/dhcpcd.conf"
+	fi
+	goToMainMenu
+}
 
+checkBackupDir
 GLOBAL_SUB_TITLE=""
 goToMainMenu
 
@@ -378,7 +467,7 @@ do
 	case $SEL in
 		1 ) networkMenu
 		;;
-		2 ) setCrontab
+		2 ) schedulerMenu
 		;;
 		3 ) changeSiteURL
 		;;
@@ -386,13 +475,21 @@ do
 		;;
 		5 ) updateMenuVersion
 		;;
-    6 ) info 
+		6 ) reset
+		;;
+    7 ) info 
 		;;
 		"1.1" ) setHostname
 		;;
     "1.2" ) setAutomaticWifi
     ;;
 		"1.3" ) setIPNetwork
+		;;
+		"2.1" ) setCrontab "sudo systemctl reboot"
+		;;
+		"2.2" ) setCrontab "sudo systemctl poweroff"
+		;;
+		"2.3" ) setCrontab
 		;;
 		"<--- " )
 
@@ -403,7 +500,8 @@ do
 				'3' 'Configure default URL for Chrome-kiosk' 
 				'4' 'Update system'
 				'5' 'Update this menu'
-        '6' 'Info'  
+        '6' 'Reset raspberry'
+				'7' 'Info'  
 				'0  ' 'Exit'
 			);
 			drawMenu "$MAIN_TIT" "${MAIN_ARR[@]}"
