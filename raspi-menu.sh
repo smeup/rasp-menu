@@ -13,7 +13,7 @@ BACKUP_DIR="$HOME"/.backup
 clear
 
 checkIfDoBackup() {
-	if [ ! -f "$BACKUP_DIR" ];
+	if [ ! -d "$BACKUP_DIR" ];
 	then
 	 createBackupFile
 	fi
@@ -293,6 +293,9 @@ changeSiteURL() {
 		whiptail --title "Activate Kiosk Mode" --msgbox "With this option you'are activating a kiosk mode and now you must insert a valid URL" 8 78
 		if [ -f "$BASH_RC" ] && [ -e "$BASH_PROFILE" ];
 		then
+			# extract the old site
+			OLD_SITE="$(cut -d "=" -f 2 <<< $(grep "SITE=" $OPENBOX_AUTOSTART))"
+			
 			grep -q "SITE=" $OPENBOX_AUTOSTART
 			if [ ! $? -eq 0 ];
 			then
@@ -311,9 +314,6 @@ changeSiteURL() {
 				sudo echo "chromium-browser --disable-translate --incognito --disable-infobars --disable-restore-session-state --disable- session-crashed-bubble --kiosk \$SITE &" >> $OPENBOX_AUTOSTART
 				NEW_SITE=$SITE
 			else
-				# extract the old site
-				OLD_SITE="$(cut -d "=" -f 2 <<< $(grep "SITE=" $OPENBOX_AUTOSTART))"
-
 				# set the correct URL
 				CURRENT_URL="https://www.smeup.com"
 				SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_URL" 3>&1 1>&2 2>&3)
@@ -444,17 +444,18 @@ setExit() {
 }
 
 reset() {
-	if [ -f "BACKUP_DIR" ];
+	if [ -d "$BACKUP_DIR" ];
 	then
-		yes | sudo cp -rf "$BACKUP_DIR""/autostart" "$OPENBOX_AUTOSTART"
-		yes | sudo cp -rf "$BACKUP_DIR""/.bash_profile" "$BASH_PROFILE"
-		yes | sudo cp -rf "$BACKUP_DIR""/.bashrc" "$BASH_RC"
-		yes | sudo cp -rf "$BACKUP_DIR""/interfaces" "/etc/network/interfaces"
-		yes | sudo cp -rf "$BACKUP_DIR""/wpa_supplicant.conf" "/etc/wpa_supplicant/wpa_supplicant.conf"
-		yes | sudo cp -rf "$BACKUP_DIR""/dhcpcd.conf" "/etc/dhcpcd.conf"
+		echo "yes" | sudo cp -rf "$BACKUP_DIR"/autostart "$OPENBOX_AUTOSTART"
+		echo "yes" | sudo cp -rf "$BACKUP_DIR"/.bash_profile "$BASH_PROFILE"
+		echo "yes" | sudo cp -rf "$BACKUP_DIR"/.bashrc "$BASH_RC"
+		echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces "/etc/network/interfaces"
+		echo "yes" | sudo cp -rf "$BACKUP_DIR"/wpa_supplicant.conf "/etc/wpa_supplicant/wpa_supplicant.conf"
+		echo "yes" | sudo cp -rf "$BACKUP_DIR"/dhcpcd.conf "/etc/dhcpcd.conf"
 	fi
 	goToMainMenu
 }
+echo "yes" | sudo cp -rf "/home/pi/.backup/autostart" "/etc/xdg/openbox/autostart"
 
 checkIfDoBackup
 GLOBAL_SUB_TITLE=""
