@@ -12,7 +12,7 @@ BACKUP_DIR="$HOME"/.backup
 
 clear
 
-checkBackupDir() {
+checkIfDoBackup() {
 	if [ ! -f "$BACKUP_DIR" ];
 	then
 	 createBackupFile
@@ -177,7 +177,7 @@ writeConfigInterface() { # (type,ssid,passw)
 }
 
 testConnection() {
-	ping -c 3 "www.google.com"
+	ping -c 3 "www.google.com" 1>/dev/null
 }
 
 setIPNetwork() {
@@ -256,15 +256,15 @@ setCrontab() {
 	fi
 
 	whiptail --msgbox "\
-		Please note: \n
-		the five fields specify how often and when to execute a command: \
-		\n\n# .---------------- [m]inute: 0 - 59 \  
-		\n# |  .------------- [h]our: 0 - 23 \
-		\n# |  |  .---------- [d]ay of month: 1 - 31 \
-		\n# |  |  |  .------- [mon]th: 1 - 12 \
-		\n# |  |  |  |  .---- [w]eek day: 0 - 6 (sunday=0) \
-		\n# |  |  |  |  | \
-		\n# *  *  *  *  * \
+Please note: \
+\nthe five fields specify how often and when to execute a command: \
+		\n\n .---------------- [m]inute: 0 - 59 \
+		\n |  .------------- [h]our: 0 - 23 \
+		\n |  |  .---------- [d]ay of month: 1 - 31 \
+		\n |  |  |  .------- [mon]th: 1 - 12 \
+		\n |  |  |  |  .---- [w]eek day: 0 - 6 (sunday=0) \
+		\n |  |  |  |  | \
+		\n *  *  *  *  * \
 		" 20 70 1
 
 	DEF_TIME="* * * * *"
@@ -273,9 +273,7 @@ setCrontab() {
 	(crontab -l 2>/dev/null; echo "$DEF_TIME $CMD" ) | crontab -
 
 	CMD=""
-	#(crontab -l 2>/dev/null; echo "*/5 * * * * /path/to/job -with args") | crontab -
-	#crontab -l -u user | cat - filename | crontab -u user -
- 	#crontab -l -u user; echo 'crontab spec'; } | crontab -u user -
+	goToMainMenu
 }
 
 schedulerMenu() {
@@ -316,15 +314,9 @@ changeSiteURL() {
 				# extract the old site
 				OLD_SITE="$(cut -d "=" -f 2 <<< $(grep "SITE=" $OPENBOX_AUTOSTART))"
 
-				# remove the line of openbox to start this config-menu file
-				#sudo sed -i '/raspi-menu.sh/d' $BASH_RC
-
+				# set the correct URL
 				CURRENT_URL="https://www.smeup.com"
 				SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_URL" 3>&1 1>&2 2>&3)
-				#echo "sed -i 's/\"exited_cleanly\":false/\"exited_cleanly\":true/' $HOME/.config/chromium/'Local State'" >> $OPENBOX_AUTOSTART
-				#echo "sed -i 's/\"exited_cleanly\":false/\"exited_cleanly\":true/; s/\"exit_type\":\"[^\"]\+\"/\"exit_type\":\"Normal\"/' $HOME/.config/chromium/Default/Preferences" >> $OPENBOX_AUTOSTART
-				#echo "SITE=$SITE"
-				#echo "chromium-browser --disable-translate --incognito --disable-infobars --disable-restore-session-state --disable- session-crashed-bubble --kiosk \$SITE &" >> $OPENBOX_AUTOSTART
 				SITE=$(sed -e 's/[&\\/]/\\&/g; s/$/\\/' -e '$s/\\$//' <<<"$SITE")
 				sudo sed -i 's/^\(\s*SITE=\s*\).*/\1'"$SITE"'/' $OPENBOX_AUTOSTART
 				NEW_SITE=$SITE
@@ -346,33 +338,38 @@ changeSiteURL() {
 }
 
 updateSystem() {
-  {
-		# APT-Update
-    i=1
-    while read -r line; do
-        i=$(( $i + 1 ))
-        echo $i
-    done < <(sudo apt -y update 2>/dev/null)
-  } | whiptail --title "Progress" --gauge "Please wait while system search updating" 6 60 0
+  testConnection
+	if [ $? = 0 ];
+	then
+		{
+			# APT-Update
+			i=1
+			while read -r line; do
+					i=$(( $i + 1 ))
+					echo $i
+			done < <(sudo apt -y update 2>/dev/null)
+		} | whiptail --title "Progress" --gauge "Please wait while system search updating" 6 60 0
 
-  {
-		# APT-Upgrade
-    i=1
-    while read -r line; do
-        i=$(( $i + 1 ))
-        echo $i
-    done < <(sudo apt -y upgrade 2>/dev/null)
-  } | whiptail --title "Progress" --gauge "Please wait while system install update" 6 60 0
+		{
+			# APT-Upgrade
+			i=1
+			while read -r line; do
+					i=$(( $i + 1 ))
+					echo $i
+			done < <(sudo apt -y upgrade 2>/dev/null)
+		} | whiptail --title "Progress" --gauge "Please wait while system install update" 6 60 0
 
-	{
-		# RPI-Update
-    i=1
-    while read -r line; do
-        i=$(( i + 1 ))
-        echo $i
-    done < <(sudo rpi-update -y 2>/dev/null)
-  } | whiptail --title "Progress" --gauge "Please wait while updating your RPI firmware and kernel" 6 60 0
-
+		{
+			# RPI-Update
+			i=1
+			while read -r line; do
+					i=$(( i + 1 ))
+					echo $i
+			done < <(sudo rpi-update -y 2>/dev/null)
+		} | whiptail --title "Progress" --gauge "Please wait while updating your RPI firmware and kernel" 6 60 0
+	else
+		whiptail --msgbox "Update failed! No connection!" 20 60 1
+	fi
   goToMainMenu
 } 
 
@@ -401,7 +398,8 @@ updateMenuVersion() {
 				fi
 			else
 				goToMainMenu
-			fi		
+			fi
+		fi		
 	else
 		whiptail --msgbox "Update failed! No connection!" 20 60 1
 	fi
@@ -458,7 +456,7 @@ reset() {
 	goToMainMenu
 }
 
-checkBackupDir
+checkIfDoBackup
 GLOBAL_SUB_TITLE=""
 goToMainMenu
 
