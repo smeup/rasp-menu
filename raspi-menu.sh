@@ -3,7 +3,8 @@
 VERSION=0.0.1
 USER=
 HOME=/home/"$USER"
-UPDATE_MENU_URL=
+URL_FILE_MENU=
+URL_UPDATE_VERSION_MENU=
 SCRIPT_PATH="$HOME"/scripts/raspi-menu.sh
 OPENBOX_AUTOSTART=/etc/xdg/openbox/autostart
 BASH_PROFILE="$HOME"/.bash_profile
@@ -28,6 +29,7 @@ createBackupFile() {
 	sudo cp "/etc/network/interfaces" "$BACKUP_DIR"
 	sudo cp "/etc/wpa_supplicant/wpa_supplicant.conf" "$BACKUP_DIR"
 	sudo cp "/etc/dhcpcd.conf" "$BACKUP_DIR"
+	sudo cp "/etc/hostname" "$BACKUP_DIR"
 }
 
 calc_windows_size() {
@@ -374,8 +376,8 @@ updateSystem() {
 } 
 
 updateMenuVersion() {
-	local CURRENTVERSION=$(grep -m1 "VERSION=" $SCRIPT_PATH)
-	local GITHUBVERSION=$(curl -s $UPDATE_MENU_URL/version)
+	local CURRENTVERSION=$(grep -m1 "VERSION=" "$SCRIPT_PATH")
+	local GITHUBVERSION=$(curl -s $URL_FILE_MENU/version)
 
 	testConnection
 	if [ $? -eq 0 ];
@@ -387,7 +389,7 @@ updateMenuVersion() {
 			if [ $? -eq 0 ]; 
 			then
 
-				wget -q $UPDATE_MENU_URL -P "$SCRIPT_PATH""_new"
+				wget -q $URL_FILE_MENU -P "$SCRIPT_PATH""_new"
 				if [ -f "$SCRIPT_PATH""_new" ];
 				then
 					cp "$SCRIPT_PATH" "$SCRIPT_PATH""_old"
@@ -452,6 +454,7 @@ reset() {
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces "/etc/network/interfaces"
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/wpa_supplicant.conf "/etc/wpa_supplicant/wpa_supplicant.conf"
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/dhcpcd.conf "/etc/dhcpcd.conf"
+		echo "yes" | sudo cp -rf "$BACKUP_DIR"/hostname "/etc/hostname"
 	fi
 	goToMainMenu
 }
