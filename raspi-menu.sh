@@ -10,6 +10,7 @@ OPENBOX_AUTOSTART=/etc/xdg/openbox/autostart
 BASH_PROFILE="$HOME"/.bash_profile
 BASH_RC="$HOME"/.bashrc
 BACKUP_DIR="$HOME"/.backup
+FILE_VARIATION_PKG=
 
 clear
 
@@ -27,9 +28,13 @@ createBackupFile() {
 	sudo cp "$BASH_PROFILE" "$BACKUP_DIR"
 	sudo cp "$BASH_RC" "$BACKUP_DIR"
 	sudo cp "/etc/network/interfaces" "$BACKUP_DIR"
+	mkdir "$BACKUP_DIR"/interfaces.d
+	sudo cp "/etc/network/interfaces.d/interfaces" "$BACKUP_DIR"/interfaces.d
 	sudo cp "/etc/wpa_supplicant/wpa_supplicant.conf" "$BACKUP_DIR"
 	sudo cp "/etc/dhcpcd.conf" "$BACKUP_DIR"
 	sudo cp "/etc/hostname" "$BACKUP_DIR"
+	sudo cp "$HOME/scripts/$FILE_VARIATION_PKG" "$BACKUP_DIR"
+	sudo rm "$HOME/scripts/$FILE_VARIATION_PKG"
 }
 
 calc_windows_size() {
@@ -75,6 +80,7 @@ networkMenu() {
 		'1.1' 'Add/Modify a '$USER' hostname'
 		'1.2' 'Set wi-fi interface with a tool' 
 		'1.3' 'Set manually wi-fi/ethernet interface'
+		'1.4' 'Test connection'
 	);
 	drawMenu "$NET_TIT" "${NET_ARR[@]}"
 }
@@ -128,29 +134,40 @@ writeStaticIP(){
 
 # TODO - Vedere che non esista già
 addAutoInterface() {
-	sudo sed -i "s/auto lo/& "$INTERFACE"/" $INTERFACE_FILE
+	echo "" >> $INTERFACE_FILE
+	echo "auto $INTERFACE" >> $INTERFACE_FILE
 }
 
 addWpaSupplicant() {
-	echo "wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf  #wpa_supplicant_$INTERFACE" >> $INTERFACE_FILE
+	echo "#wpa_supplicant_$INTERFACE" >> $INTERFACE_FILE
+	echo "wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf" >> $INTERFACE_FILE
 }
 
 # TODO - Fare controllo prima di scrittura se esiste già
 writeWpaSupplicant() { # (ssid,passw)
 	WPASUPPLICANT_FILE=/etc/wpa_supplicant/wpa_supplicant.conf
 	echo 'network={' >> $WPASUPPLICANT_FILE
-  echo "    ssid=\"$1\"" >> $WPASUPPLICANT_FILE
-  echo "    psk=\"$2\"" >> $WPASUPPLICANT_FILE
-  echo '}' >> $WPASUPPLICANT_FILE
+	echo "    ssid=\"$1\"" >> $WPASUPPLICANT_FILE
+	echo "    psk=\"$2\"" >> $WPASUPPLICANT_FILE
+	echo '}' >> $WPASUPPLICANT_FILE
 }
 
 writeDHCPStatusInterface() { # (type_interface)
-	echo "" >> $INTERFACE_FILE
 	echo "iface $INTERFACE inet $1" >> $INTERFACE_FILE
 }
 
 writeConfigInterface() { # (type,ssid,passw)
 	TYPE_INTERFACE=$1
+
+	# Disable interface
+	sudo ifconfig $INTERFACE down
+	if [ TYPE_INTERFACE -eq 1 ];
+	then
+		if [ -e "/var/run/wpa_supplicant/$INTERFACE" ];
+		then
+			sudo rm -rf "/var/run/wpa_supplicant/$INTERFACE"
+		fi
+	fi
 
 	whiptail --yesno "How do you want to use your interface?" --title "Set Network interface" --yes-button "DHCP" --no-button "Static IP" 10 60 2
 	case $? in
@@ -159,9 +176,10 @@ writeConfigInterface() { # (type,ssid,passw)
 			writeDHCPStatusInterface "dhcp"
 			
 			if [ $TYPE_INTERFACE = 1 ];
-			then	
+			then
+
 				addWpaSupplicant
-				writeWpaSupplicant $2 $3
+				writeWpaSupplicant "${2}" "${3}"
 			fi
 		;;
 		1 )
@@ -171,11 +189,27 @@ writeConfigInterface() { # (type,ssid,passw)
 			if [ $TYPE_INTERFACE = 1 ];
 			then	
 				addWpaSupplicant
-				writeWpaSupplicant $2 $3
+				writeWpaSupplicant "${2}" "${3}"
 			fi
 			writeStaticIP
 		;;
 	esac
+	# Re-enable interface and restart network
+	sudo systemctl daemon-reload
+	sudo service dhcpcd force-reload
+	sudo ifconfig $INTERFACE up
+	/etc/init.d/networking restart
+	sleep 2
+	sudo ifconfig $INTERFACE down
+	sudo ifconfig $INTERFACE up
+	sleep 2
+	testConnection
+	if [ $? -eq 0 ];
+	then
+		whiptail --title "Test Connection" --msgbox "The configuration was OK.\nThe connection work correctly." 8 78
+	else
+		whiptail --title "Test Connection" --msgbox "Test configuration failed.\nThe connection not work correctly." 8 78
+	fi
 }
 
 testConnection() {
@@ -183,7 +217,7 @@ testConnection() {
 }
 
 setIPNetwork() {
-	INTERFACE_FILE=/etc/network/interfaces
+	INTERFACE_FILE=/etc/network/interfaces.d/interfaces
 	# Scan interfaces
 	local counter=0
 	local LIST_INTERF=$(ls /sys/class/net)
@@ -202,15 +236,16 @@ setIPNetwork() {
 	INTERFACE=$SEL
 
 	# Search if was just configured the interface but exclude the line that starts with '#'
-	$(grep "iface $INTERFACE" "$INTERFACE_FILE" | grep -v "#")
+	grep "iface $INTERFACE" "$INTERFACE_FILE" | grep -v "#"
 	if [ $? -eq 0 ];
 	then
 		
-		whiptail --yesno "Attention! The interface is already set.\nClear and reinsert it?" --title "" 10 60 2
+		whiptail --yesno "Attention! The interface is already set.\nClear and reinsert it?" 10 60 2
 		if [ $? -eq 0 ];
 		then
 			# findAndRemoveInterface
-			sudo sed -i "/\b\(iface $INTERFACE\|auto $INTRFACE\|allow-hotplug $INTERFACE\|#wpa_supplicant_$INTERFACE\)\b/d" $INTERFACE_FILE
+			sudo sed -i "/#wpa_supplicant_$INTERFACE/,+1 d" $INTERFACE_FILE
+			sudo sed -i "/iface $INTERFACE\|auto $INTERFACE\|allow-hotplug $INTERFACE/d" $INTERFACE_FILE
 		else
 			goToMainMenu
 		fi
@@ -222,25 +257,17 @@ setIPNetwork() {
 			writeConfigInterface 0
 	else
 			local SSID_NAME=$(whiptail --inputbox "Insert a SSID of the Wi-fi (Wi-fi name)" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
-			if [ $? -eq 1 ]; # exitstatus
+			if [ ! $? -eq 0 ]; # exitstatus
 			then
 				goToMainMenu
 			fi
 			local PASSWORD=$(whiptail --inputbox "Insert a passphrase of Wi-fi" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
-			if [ $? -eq 1 ]; # exitstatus
+			if [ ! $? -eq 0 ]; # exitstatus
 			then
 				goToMainMenu
 			fi
 
-			writeConfigInterface 1 "$SSID_NAME" "$PASSWORD"
-	fi
-	/etc/init.d/networking restart
-	testConnection
-	if [ $? -eq 0 ];
-	then
-		whiptail --title "Test Connection" --msgbox "The configuration was OK.\nThe connection work correctly." 8 78
-	else
-		whiptail --title "Test Connection" --msgbox "Test failed\nThe connection not work correctly." 8 78
+			writeConfigInterface 1 "${SSID_NAME}" "${PASSWORD}"
 	fi
 	goToMainMenu
 }
@@ -313,7 +340,7 @@ changeSiteURL() {
 				CURRENT_URL="https://www.smeup.com"
 				SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_URL" 3>&1 1>&2 2>&3)
 				sudo echo "SITE=$SITE" >> $OPENBOX_AUTOSTART
-				sudo echo "chromium-browser --disable-translate --incognito --disable-infobars --disable-restore-session-state --disable- session-crashed-bubble --kiosk \$SITE &" >> $OPENBOX_AUTOSTART
+				sudo echo "chromium-browser --disable-translate --incognito --disable-infobars --disable-restore-session-state --disable-session-crashed-bubble --kiosk \$SITE &" >> $OPENBOX_AUTOSTART
 				NEW_SITE=$SITE
 			else
 				# set the correct URL
@@ -452,13 +479,16 @@ reset() {
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/.bash_profile "$BASH_PROFILE"
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/.bashrc "$BASH_RC"
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces "/etc/network/interfaces"
+		echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces.d/interfaces "/etc/network/interfaces.d/interfaces"
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/wpa_supplicant.conf "/etc/wpa_supplicant/wpa_supplicant.conf"
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/dhcpcd.conf "/etc/dhcpcd.conf"
 		echo "yes" | sudo cp -rf "$BACKUP_DIR"/hostname "/etc/hostname"
+		
+		whiptail --title "Reset Raspberry" --msgbox "Raspberry was correctly reset." 8 78
+
 	fi
 	goToMainMenu
 }
-echo "yes" | sudo cp -rf "/home/pi/.backup/autostart" "/etc/xdg/openbox/autostart"
 
 checkIfDoBackup
 GLOBAL_SUB_TITLE=""
@@ -483,9 +513,18 @@ do
 		;;
 		"1.1" ) setHostname
 		;;
-    "1.2" ) setAutomaticWifi
-    ;;
+		"1.2" ) setAutomaticWifi
+		;;
 		"1.3" ) setIPNetwork
+		;;
+		"1.4" ) testConnection
+			if [ $? -eq 0 ];
+			then
+				whiptail --title "Test Connection" --msgbox "The configuration was OK.\nThe connection work correctly." 8 78
+			else
+				whiptail --title "Test Connection" --msgbox "Test configuration failed.\nThe connection not work correctly." 8 78
+			fi
+			goToMainMenu
 		;;
 		"2.1" ) setCrontab "sudo systemctl reboot"
 		;;
@@ -502,7 +541,7 @@ do
 				'3' 'Configure default URL for Chrome-kiosk' 
 				'4' 'Update system'
 				'5' 'Update this menu'
-        '6' 'Reset raspberry'
+        		'6' 'Reset raspberry'
 				'7' 'Info'  
 				'0  ' 'Exit'
 			);
