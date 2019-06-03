@@ -351,7 +351,7 @@ changeSiteURL() {
 				NEW_SITE=$SITE
 			fi
 			
-			if [ $NEW_SITE != $OLD_SITE ];
+			if [ "$NEW_SITE" -ne "$OLD_SITE" ];
 			then
 				whiptail --title "Activate URL Browser" --msgbox "URL Browser changed correctly and succesfull activated KIOSK MODE." 8 78
 			else
