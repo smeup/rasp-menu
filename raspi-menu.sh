@@ -274,7 +274,7 @@ setIPNetwork() {
 
 setCrontab() {
 	CMD=$?
-	if [ $CMD = "" ];
+	if [ -n "$CMD" ];
 	then
 		CMD=$(whiptail --inputbox "Please enter a valid command" 20 60 3>&1 1>&2 2>&3)
 	fi
@@ -463,9 +463,9 @@ setExit() {
 			whiptail --yesno "For use raspberry in kios-mode you MUST change the default URL in menu\n\nDo you want to leave without abilitate a Kiosk mode?" 20 60
 			if [ $? -eq 0 ];
 			then
-				goToMainMenu
+				checkHowExit
 			else
-			  checkHowExit
+				goToMainMenu
 			fi
 		else
 			checkHowExit
