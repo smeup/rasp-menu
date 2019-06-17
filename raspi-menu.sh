@@ -138,6 +138,10 @@ addAutoInterface() {
 	echo "auto $INTERFACE" >> $INTERFACE_FILE
 }
 
+addHotPlugInterface() {
+	echo "allow-hotplug $INTERFACE"
+}
+
 addWpaSupplicant() {
 	echo "#wpa_supplicant_$INTERFACE" >> $INTERFACE_FILE
 	echo "wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf" >> $INTERFACE_FILE
@@ -160,8 +164,8 @@ writeConfigInterface() { # (type,ssid,passw)
 	TYPE_INTERFACE=$1
 
 	# Disable interface
-	sudo ifconfig $INTERFACE down
-	if [ TYPE_INTERFACE -eq 1 ];
+	sudo ifdown $INTERFACE
+	if [ $TYPE_INTERFACE -eq 1 ];
 	then
 		if [ -e "/var/run/wpa_supplicant/$INTERFACE" ];
 		then
@@ -173,17 +177,18 @@ writeConfigInterface() { # (type,ssid,passw)
 	case $? in
 		0 ) 
 			addAutoInterface
+			addHotPlugInterface
 			writeDHCPStatusInterface "dhcp"
 			
 			if [ $TYPE_INTERFACE = 1 ];
 			then
-
 				addWpaSupplicant
 				writeWpaSupplicant "${2}" "${3}"
 			fi
 		;;
 		1 )
 			addAutoInterface
+			addHotPlugInterface
 			writeDHCPStatusInterface "manual"
 			
 			if [ $TYPE_INTERFACE = 1 ];
@@ -197,11 +202,10 @@ writeConfigInterface() { # (type,ssid,passw)
 	# Re-enable interface and restart network
 	sudo systemctl daemon-reload
 	sudo service dhcpcd force-reload
-	sudo ifconfig $INTERFACE up
-	/etc/init.d/networking restart
+	sudo ifup $INTERFACE
 	sleep 2
-	sudo ifconfig $INTERFACE down
-	sudo ifconfig $INTERFACE up
+	sudo rm -rf /var/run/wpa_supplicant/$INTERFACE
+	sudo /etc/init.d/networking restart
 	sleep 2
 	testConnection
 	if [ $? -eq 0 ];
