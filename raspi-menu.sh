@@ -4,7 +4,7 @@ VERSION=0.0.1
 USER=
 HOME=/home/"$USER"
 URL_FILE_MENU=
-URL_UPDATE_VERSION_MENU=
+URL_FILE_VERSION_MENU=
 SCRIPT_PATH="$HOME"/scripts/raspi-menu.sh
 OPENBOX_AUTOSTART=/etc/xdg/openbox/autostart
 BASH_PROFILE="$HOME"/.bash_profile
@@ -101,25 +101,27 @@ setAutomaticWifi() {
 
 setHostname() {
 	whiptail --msgbox "\
-	Please note: \n
-	hostname's labels	may contain only the ASCII letters 'a' through 'z' (case-insensitive), \
-	the digits '0' through '9', and the hypen '-'.\
-	Hostname labels cannot begin or end with a hypen '-'. \
-	No other symbols, punctuation characters, or blank spaces are permitted.\
+			Please note: \n
+hostname's labels may contain only the ASCII letters from 'a' to 'z' (case-insensitive), \
+the digits from '0' to '9', and the hypen '-'.\
+\nHostname labels cannot begin or end with a hypen '-'. \
+\nNO OTHER SYMBOLS, punctuation characters, or blank spaces are permitted.\
 	" 20 70 1
-  CURRENT_HOSTNAME=`cat /etc/hostname | tr -d " \t\n\r"`
-  NEW_HOSTNAME=$(whiptail --inputbox "Please enter a hostname" 20 60 "$CURRENT_HOSTNAME" 3>&1 1>&2 2>&3)
+  	CURRENT_HOSTNAME=`cat /etc/hostname | tr -d " \t\n\r"`
+	NEW_HOSTNAME=$(whiptail --inputbox "Please enter a hostname" 20 60 "$CURRENT_HOSTNAME" 3>&1 1>&2 2>&3)
+  
+	if [ $? -eq 0 ];
+	then
+		echo $NEW_HOSTNAME > /etc/hostname
+		sudo sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$NEW_HOSTNAME/g" /etc/hosts
 
-  if [ $? -eq 0 ]; then
-    echo $NEW_HOSTNAME > /etc/hostname
-    sudo sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$NEW_HOSTNAME/g" /etc/hosts
-  fi
-  if [ $? -eq 0 ]; then
-    whiptail --msgbox "Hostname changed succesfull." 20 70 1
-  else
-    whiptail --msgbox "Something went wrong. Try again." 20 70 1
-  fi
-  goToMainMenu
+		if [ $? -eq 0 ]; then
+			whiptail --msgbox "Hostname changed succesfull." 20 70 1
+		else
+			whiptail --msgbox "Something went wrong. Try again." 20 70 1
+		fi
+  	fi
+  	goToMainMenu
 }
 
 writeStaticIP(){
@@ -139,7 +141,7 @@ addAutoInterface() {
 }
 
 addHotPlugInterface() {
-	echo "allow-hotplug $INTERFACE"
+	echo "allow-hotplug $INTERFACE" >> $INTERFACE_FILE
 }
 
 addWpaSupplicant() {
@@ -210,9 +212,9 @@ writeConfigInterface() { # (type,ssid,passw)
 	testConnection
 	if [ $? -eq 0 ];
 	then
-		whiptail --title "Test Connection" --msgbox "The configuration was OK.\nThe connection work correctly." 8 78
+		whiptail --title "Test Connection" --msgbox "Result Test: OK!\nThe connection work correctly." 8 78
 	else
-		whiptail --title "Test Connection" --msgbox "Test configuration failed.\nThe connection not work correctly." 8 78
+		whiptail --title "Test Connection" --msgbox "Result Test: FAILED!\nThe connection not work correctly." 8 78
 	fi
 }
 
@@ -236,59 +238,78 @@ setIPNetwork() {
 	SET_NET_TIT="Set Network"
 	GLOBAL_SUB_TITLE="Select one interface to configure it:"
 	drawMenu "$SET_NET_TIT" "${INTERF_MENU_LIST[@]}"
-
+	
+	INTERFACE=''
+	unset CANCEL
 	INTERFACE=$SEL
-
-	# Search if was just configured the interface but exclude the line that starts with '#'
-	grep "iface $INTERFACE" "$INTERFACE_FILE" | grep -v "#"
-	if [ $? -eq 0 ];
-	then
-		
-		whiptail --yesno "Attention! The interface is already set.\nClear and reinsert it?" 10 60 2
+	
+	if [ ! -z "$INTERFACE" ];
+	then 
+		# Search if was just configured the interface but exclude the line that starts with '#'
+		grep "iface $INTERFACE" "$INTERFACE_FILE" | grep -v "#"
 		if [ $? -eq 0 ];
 		then
-			# findAndRemoveInterface
-			sudo sed -i "/#wpa_supplicant_$INTERFACE/,+1 d" $INTERFACE_FILE
-			sudo sed -i "/iface $INTERFACE\|auto $INTERFACE\|allow-hotplug $INTERFACE/d" $INTERFACE_FILE
-		else
-			goToMainMenu
+			unset CANCEL
+			whiptail --yesno "Attention! The interface is already set.\nClear and reinsert it?" 10 60 2
+			if [ $? -eq 0 ];
+			then
+				# findAndRemoveInterface
+				sudo sed -i "/#wpa_supplicant_$INTERFACE/,+1 d" $INTERFACE_FILE
+				sudo sed -i "/iface $INTERFACE\|auto $INTERFACE\|allow-hotplug $INTERFACE/d" $INTERFACE_FILE
+			else
+				CANCEL=1
+			fi
 		fi
-	fi
-
-	whiptail --yesno "What type of interface you selected?" --title "Set Network interface" --yes-button "Ethernet" --no-button "Wi-fi" 10 60 2
-	if [ $? -eq 0 ];
-	then
-			writeConfigInterface 0
-	else
-			local SSID_NAME=$(whiptail --inputbox "Insert a SSID of the Wi-fi (Wi-fi name)" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
-			if [ ! $? -eq 0 ]; # exitstatus
+		if [ -z "$CANCEL" ];
+		then
+			whiptail --yesno "What type of interface you selected?" --title "Set Network interface" --yes-button "Ethernet" --no-button "Wi-fi" 10 60 2
+			if [ $? -eq 0 ];
 			then
-				goToMainMenu
-			fi
-			local PASSWORD=$(whiptail --inputbox "Insert a passphrase of Wi-fi" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
-			if [ ! $? -eq 0 ]; # exitstatus
-			then
-				goToMainMenu
-			fi
+					writeConfigInterface 0
+			else
+					unset SSID_NAME
+					unset CANCEL
+					while [ -z "$SSID_NAME" ]; do
+						SSID_NAME=$(whiptail --inputbox "Insert a SSID of the Wi-fi (Wi-fi name)" --title "Set Network interface" 8 78 3>&1 1>&2 2>&3)
+						if [ $? -eq 1 ];
+						then
+							CANCEL=1
+							break
+						elif [ -z "$SSID_NAME" ];
+						then
+							whiptail --msgbox "SSID cannot be empty. Please try insert again." 10 60
+						fi
+					done
+					
+					if [ -z "$CANCEL" ];
+					then
+						PASSWORD=$(whiptail --inputbox "Insert a passphrase of Wi-fi" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
+						if [ $? -eq 1 ];
+						then
+							CANCEL=1
+						fi
 
-			writeConfigInterface 1 "${SSID_NAME}" "${PASSWORD}"
+						if [ -z "$CANCEL" ];
+						then
+							writeConfigInterface 1 "${SSID_NAME}" "${PASSWORD}"
+						fi
+					fi
+			fi
+		fi
 	fi
 	goToMainMenu
 }
 
 setCrontab() {
-	CMD=$?
-	if [ -n "$CMD" ];
+	CMD=$1
+	if [ -z "$CMD" ];
 	then
 		CMD=$(whiptail --inputbox "Please enter a valid command" 20 60 3>&1 1>&2 2>&3)
 	fi
 
-	if [ $? != 0 ];
+	if [ $? -ne 1 ];
 	then
-		goToMainMenu 
-	fi
-
-	whiptail --msgbox "\
+		whiptail --msgbox "\
 Please note: \
 \nthe five fields specify how often and when to execute a command: \
 		\n\n .---------------- [m]inute: 0 - 59 \
@@ -300,12 +321,33 @@ Please note: \
 		\n *  *  *  *  * \
 		" 20 70 1
 
-	DEF_TIME="* * * * *"
-	DEF_TIME=$(whiptail --inputbox "Please enter a valid frequency" 20 60 "$DEF_TIME" 3>&1 1>&2 2>&3)
-	
-	(crontab -l 2>/dev/null; echo "$DEF_TIME $CMD" ) | crontab -
+		DEF_TIME="* * * * *"
+		DEF_TIME=$(whiptail --inputbox "Please enter a valid frequency" 20 60 "$DEF_TIME" 3>&1 1>&2 2>&3)
+		
+		(crontab -l 2>/dev/null; echo "$DEF_TIME $CMD" ) | crontab -
 
-	CMD=""
+		CMD=""
+	fi
+	goToMainMenu
+}
+
+getCrontab() {
+	LIST_CRONTAB=$(sudo crontab -l)
+	if [ $? -eq 0 ];
+	then
+		whiptail --msgbox "Please note: \
+\nthe five fields specify how often and when to execute a command: \
+		\n\n .----------------- [m]inute: 0 - 59 \
+		\n | .-------------- [h]our: 0 - 23 \
+		\n | | .----------- [d]ay of month: 1 - 31 \
+		\n | | | .-------- [mon]th: 1 - 12 \
+		\n | | | | .----- [w]eek day: 0 - 6 (sunday=0) \
+		\n | | | | |  .- Command to schedule\
+		\n | | | | |  |\
+		\n\n\n $LIST_CRONTAB" --title "List of active scheduler" 30 70 1
+	else
+		whiptail --msgbox "No scheduler found" 20 70 1
+	fi
 	goToMainMenu
 }
 
@@ -316,6 +358,7 @@ schedulerMenu() {
 		'2.1' 'Add a RESTART scheduler'
 		'2.2' 'Add a POWEROFF scheduler' 
 		'2.3' 'Add a custom scheduler'
+		'2.4' 'List added scheduler'
 	);
 	drawMenu "$SCH_TIT" "${SCH_ARR[@]}"
 }
@@ -372,7 +415,7 @@ changeSiteURL() {
 
 updateSystem() {
   testConnection
-	if [ $? = 0 ];
+	if [ $? -eq 0 ];
 	then
 		{
 			# APT-Update
@@ -392,14 +435,14 @@ updateSystem() {
 			done < <(sudo apt -y upgrade 2>/dev/null)
 		} | whiptail --title "Progress" --gauge "Please wait while system install update" 6 60 0
 
-		{
+#		{
 			# RPI-Update
-			i=1
-			while read -r line; do
-					i=$(( i + 1 ))
-					echo $i
-			done < <(sudo rpi-update -y 2>/dev/null)
-		} | whiptail --title "Progress" --gauge "Please wait while updating your RPI firmware and kernel" 6 60 0
+#			i=1
+#			while read -r line; do
+#					i=$(( i + 1 ))
+#					echo $i
+#			done < <(sudo rpi-update -y 2>/dev/null)
+#		} | whiptail --title "Progress" --gauge "Please wait while updating your RPI firmware and kernel" 6 60 0
 	else
 		whiptail --msgbox "Update failed! No connection!" 20 60 1
 	fi
@@ -408,7 +451,7 @@ updateSystem() {
 
 updateMenuVersion() {
 	local CURRENTVERSION=$(grep -m1 "VERSION=" "$SCRIPT_PATH")
-	local GITHUBVERSION=$(curl -s $URL_FILE_MENU/version)
+	local GITHUBVERSION=$(curl -s $URL_FILE_VERSION_MENU)
 
 	testConnection
 	if [ $? -eq 0 ];
@@ -524,9 +567,9 @@ do
 		"1.4" ) testConnection
 			if [ $? -eq 0 ];
 			then
-				whiptail --title "Test Connection" --msgbox "The configuration was OK.\nThe connection work correctly." 8 78
+				whiptail --title "Test Connection" --msgbox "Result Test: OK!\nThe connection work correctly." 8 78
 			else
-				whiptail --title "Test Connection" --msgbox "Test configuration failed.\nThe connection not work correctly." 8 78
+				whiptail --title "Test Connection" --msgbox "Result Test: FAILED!\nThe connection not work correctly." 8 78
 			fi
 			goToMainMenu
 		;;
@@ -535,6 +578,8 @@ do
 		"2.2" ) setCrontab "sudo systemctl poweroff"
 		;;
 		"2.3" ) setCrontab
+		;;
+		"2.4" ) getCrontab
 		;;
 		"<--- " )
 
