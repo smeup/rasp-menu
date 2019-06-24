@@ -125,16 +125,24 @@
 	}
 
 	writeStaticIP(){
+		unset IP_ROUTER
+		unset IP_DNS
 		local IP_ADDR=$(whiptail --inputbox "Insert a CIDR IP address with a SUBNETMASK like 192.168.168.207/16" 8 78 --title "Insert static IP" 3>&1 1>&2 2>&3)
-		local IP_ROUTER=$(whiptail --inputbox "Insert RouterIP address" 8 78 --title "Insert router IP" 3>&1 1>&2 2>&3)
-		local IP_DNS=$(whiptail --inputbox "Insert the IP address for DNS, if are multiple DNS you can divide it by a space \" \"" 8 78 --title "Insert DNS IP" 3>&1 1>&2 2>&3)
-		echo "interface $INTERFACE" >> /etc/dhcpcd.conf
-		echo "static ip_address=$IP_ADDR" >> /etc/dhcpcd.conf
-		echo "static routers=$IP_ROUTER" >> /etc/dhcpcd.conf
-		echo "static domain_name_servers=$IP_DNS" >> /etc/dhcpcd.conf
+		local IP_ROUTER=$(whiptail --inputbox "Insert RouterIP address \nNote: Nothing if don't want to set it." 8 78 --title "Insert router IP" 3>&1 1>&2 2>&3)
+		local IP_DNS=$(whiptail --inputbox "Insert the IP address for DNS, if are multiple DNS you can divide it by a space \" \"\nNote: Nothing if don't want to set it." 8 78 --title "Insert DNS IP" 3>&1 1>&2 2>&3)
+		echo "#-!-$INTERFACE-# \ninterface $INTERFACE" >> /etc/dhcpcd.conf
+		echo "#-!-$INTERFACE-# \nstatic ip_address=$IP_ADDR" >> /etc/dhcpcd.conf
+		
+		if [ ! -z $IP_ROUTER ];
+		then
+			echo "#-!-$INTERFACE-# \nstatic routers=$IP_ROUTER" >> /etc/dhcpcd.conf
+		fi
+		if [ ! -z $IP_DNS ];
+		then
+			echo "#-!-$INTERFACE-# \nstatic domain_name_servers=$IP_DNS" >> /etc/dhcpcd.conf
+		fi
 	}
 
-	# TODO - Vedere che non esista già
 	addAutoInterface() {
 		echo "" >> $INTERFACE_FILE
 		echo "auto $INTERFACE" >> $INTERFACE_FILE
@@ -149,12 +157,12 @@
 		echo "wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf" >> $INTERFACE_FILE
 	}
 
-	# TODO - Fare controllo prima di scrittura se esiste già
 	writeWpaSupplicant() { # (ssid,passw)
 		WPASUPPLICANT_FILE=/etc/wpa_supplicant/wpa_supplicant.conf
 		echo 'network={' >> $WPASUPPLICANT_FILE
-		echo "    ssid=\"$1\"" >> $WPASUPPLICANT_FILE
-		echo "    psk=\"$2\"" >> $WPASUPPLICANT_FILE
+		echo "	ssid=\"$1\"" >> $WPASUPPLICANT_FILE
+		echo "	psk=\"$2\"" >> $WPASUPPLICANT_FILE
+		echo "	key_mgmt=\"WPA-PSK\"" >> $WPASUPPLICANT_FILE
 		echo '}' >> $WPASUPPLICANT_FILE
 	}
 
@@ -214,7 +222,7 @@
 		then
 			whiptail --title "Test Connection" --msgbox "Result Test: OK!\nThe connection work correctly." 8 78
 		else
-			whiptail --title "Test Connection" --msgbox "Result Test: FAILED!\nThe connection not work correctly." 8 78
+			whiptail --title "Test Connection" --msgbox "Result Test: FAILED!\nEnable connection require to reboot the raspberry." 8 78
 		fi
 	}
 
@@ -227,6 +235,7 @@
 		# Scan interfaces
 		local counter=0
 		local LIST_INTERF=$(ls /sys/class/net)
+		# Count all interface found
 		while IFS=' ' read -ra CUTTED_INTERF ; do
 			for i in "${CUTTED_INTERF[@]}"; do
 			local INTERF_MENU_LIST=("${INTERF_MENU_LIST[@]}" "$i" "     Interfaccia $counter   " )
@@ -253,9 +262,18 @@
 				whiptail --yesno "Attention! The interface is already set.\nClear and reinsert it?" 10 60 2
 				if [ $? -eq 0 ];
 				then
-					# findAndRemoveInterface
+					# find and remove interface
 					sudo sed -i "/#wpa_supplicant_$INTERFACE/,+1 d" $INTERFACE_FILE
 					sudo sed -i "/iface $INTERFACE\|auto $INTERFACE\|allow-hotplug $INTERFACE/d" $INTERFACE_FILE
+
+					# find and remove static IP if set
+					DHCPCD_FILE=/etc/dhcpcd.conf
+					grep "#-!-$INTERFACE-#" $DHCPCD_FILE > /dev/null
+					if [ $? -eq 0 ];
+					then
+						sudo sed -i "/#-!-$INTERFACE-#/,+1 d" $DHCPCD_FILE
+					fi
+				
 				else
 					CANCEL=1
 				fi
@@ -280,7 +298,25 @@
 								whiptail --msgbox "SSID cannot be empty. Please try insert again." 10 60
 							fi
 						done
+
 						
+						if [ -z "$CANCEL" ];
+						then
+							# Check if SSID is present in wpa_supplicant
+							grep "ssid=\"$SSID_NAME\"" /etc/wpa_supplicant/wpa_supplicant.conf
+							if [ $? -eq 0 ];
+							then
+								whiptail --yesno "SSID already configured!\n Do you want to reconfigure?" --title "Set Wifi" 10 60 2
+								if [ $? -eq 0 ];
+								then
+									WPA_CONF=1
+								else
+									unset WPA_CONF
+									CANCEL=1
+								fi
+							fi
+						fi
+
 						if [ -z "$CANCEL" ];
 						then
 							PASSWORD=$(whiptail --inputbox "Insert a passphrase of Wi-fi" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
@@ -291,7 +327,12 @@
 
 							if [ -z "$CANCEL" ];
 							then
-								writeConfigInterface 1 "${SSID_NAME}" "${PASSWORD}"
+								if [ -z $WPA_CONF ];
+								then
+									writeConfigInterface 1 "${SSID_NAME}" "${PASSWORD}"
+								else # Exchange the value of passphrase already set
+									sudo sed -i "/ssid=\"$SSID_NAME\"/,/\}/ s/^\(\s*psk=\s*\).*/\1\"$PASSWORD\"/" /etc/wpa_supplicant/wpa_supplicant.conf
+								fi
 							fi
 						fi
 				fi
@@ -351,7 +392,7 @@
 			\n| | | | |  | 
 			\n\n\n$LIST_CRONTAB" --title "List of active scheduler" 30 70 1
 		else
-			whiptail --msgbox "No scheduler found" 20 70 1
+			whiptail --title "List of active scheduler" --msgbox "No scheduler found" 20 70 1
 		fi
 		goToMainMenu
 	}
@@ -418,7 +459,7 @@
 					CURRENT_URL="https://www.smeup.com"
 					SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_URL" 3>&1 1>&2 2>&3)
 					sudo echo "SITE=$SITE" >> $OPENBOX_AUTOSTART
-					sudo echo "chromium-browser --disable-translate --incognito --disable-infobars --disable-restore-session-state --disable-session-crashed-bubble --kiosk \$SITE &" >> $OPENBOX_AUTOSTART
+					sudo echo 'chromium-browser --disable-features=site-per-process,TranslateUI,BlinkGenPropertyTrees,IsolateOrigins --disable-extensions --disable-popup-blocking --incognito --disable-infobars --disable-restore-session-state --disable-session-crashed-bubble --kiosk "$SITE" &' >> $OPENBOX_AUTOSTART
 					NEW_SITE=$SITE
 				else
 					# set the correct URL
@@ -442,7 +483,7 @@
 					then
 						NEW_SITE=$SITE
 						SITE=$(sed -e 's/[&\\/]/\\&/g; s/$/\\/' -e '$s/\\$//' <<<"$SITE")
-						sudo sed -i 's/^\(\s*SITE=\s*\).*/\1'"$SITE"'/' $OPENBOX_AUTOSTART
+						sudo sed -i 's/^\(\s*SITE=\s*\).*/\1'\'$SITE\''/' $OPENBOX_AUTOSTART
 					fi
 				fi
 
@@ -590,6 +631,10 @@ Writed by: Sme.UP Spa"
 				
 				# Usato comando e non funzione di cancellazione per i whiptail che si porta dietro
 				sudo crontab -r > /dev/null
+
+				# Delete lease for interfaces
+				sudo rm /var/lib/dhcp/*
+				sudo rm /var/lib/dhcpcd5/*
 
 				whiptail --title "Reset Raspberry" --msgbox "Raspberry was correctly reset." 8 78
 			fi
