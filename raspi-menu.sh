@@ -1,16 +1,18 @@
 	#! /bin/bash
 
-	VERSION=0.0.1
-	USER=
+	VERSION=0.0.2
+	USER=$SUDO_USER
 	HOME=/home/"$USER"
-	URL_FILE_MENU=
-	URL_FILE_VERSION_MENU=
-	SCRIPT_PATH="$HOME"/scripts/raspi-menu.sh
+	MENU_FILE_NAME=$MENU_FILE_NAME
+	URL_FILE_MENU=$URL_FILE_MENU
+	URL_FILE_VERSION_MENU=$URL_FILE_VERSION_MENU
+	FILE_VARIATION_PKG=$FILE_VARIATION_PKG
+	BACKUP_DIR=$BACKUP_DIR_PATH
+	SCRIPT_PATH=$MENU_SCRIPT_PATH
+	
 	OPENBOX_AUTOSTART=/etc/xdg/openbox/autostart
 	BASH_PROFILE="$HOME"/.bash_profile
 	BASH_RC="$HOME"/.bashrc
-	BACKUP_DIR="$HOME"/.backup
-	FILE_VARIATION_PKG=
 
 	clear
 
@@ -78,11 +80,34 @@
 	declare -a NET_ARR=(
 			'<--- ' 'Back to Main Menu'
 			'1.1' 'Add/Modify a '$USER' hostname'
-			'1.2' 'Set wi-fi interface with a tool' 
-			'1.3' 'Set manually wi-fi/ethernet interface'
+			'1.2' 'Set wi-fi/ethernet interface with a TOOL' 
+			'1.3' 'Set wi-fi/ethernet interface manually'
 			'1.4' 'Test connection'
+			'1.5' 'Reset network'
 		);
 		drawMenu "$NET_TIT" "${NET_ARR[@]}"
+	}
+
+	resetNetwork() {
+		whiptail --yesno "Do you really want reset raspberry's network?" --title "Reset network" 8 50 2
+		if [ $? -eq 0 ];
+		then
+			if [ -d "$BACKUP_DIR" ];
+			then
+				echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces "/etc/network/interfaces"
+				echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces.d/interfaces "/etc/network/interfaces.d/interfaces"
+				echo "yes" | sudo cp -rf "$BACKUP_DIR"/wpa_supplicant.conf "/etc/wpa_supplicant/wpa_supplicant.conf"
+				echo "yes" | sudo cp -rf "$BACKUP_DIR"/dhcpcd.conf "/etc/dhcpcd.conf"
+				echo "yes" | sudo cp -rf "$BACKUP_DIR"/hostname "/etc/hostname"
+				
+				# Delete lease for interfaces
+				sudo rm /var/lib/dhcp/*
+				sudo rm /var/lib/dhcpcd5/*
+
+				whiptail --title "Reset Raspberry" --msgbox "Raspberry was correctly reset." 8 78
+			fi
+		fi
+		goToMainMenu
 	}
 
 	setAutomaticWifi() {
@@ -101,9 +126,8 @@
 
 	setHostname() {
 		whiptail --msgbox "\
-				Please note: \n
-	hostname's labels may contain only the ASCII letters from 'a' to 'z' (case-insensitive), \
-	the digits from '0' to '9', and the hypen '-'.\
+				Please note: \ 
+	\nhostname's labels may contain only the ASCII letters from 'a' to 'z' (case-insensitive), the digits from '0' to '9', and the hypen '-'.\
 	\nHostname labels cannot begin or end with a hypen '-'. \
 	\nNO OTHER SYMBOLS, punctuation characters, or blank spaces are permitted.\
 		" 20 70 1
@@ -162,7 +186,7 @@
 		echo 'network={' >> $WPASUPPLICANT_FILE
 		echo "	ssid=\"$1\"" >> $WPASUPPLICANT_FILE
 		echo "	psk=\"$2\"" >> $WPASUPPLICANT_FILE
-		echo "	key_mgmt=\"WPA-PSK\"" >> $WPASUPPLICANT_FILE
+		echo "	key_mgmt=WPA-PSK" >> $WPASUPPLICANT_FILE
 		echo '}' >> $WPASUPPLICANT_FILE
 	}
 
@@ -174,7 +198,7 @@
 		TYPE_INTERFACE=$1
 
 		# Disable interface
-		sudo ifdown $INTERFACE
+		sudo ifconfig $INTERFACE down
 		if [ $TYPE_INTERFACE -eq 1 ];
 		then
 			if [ -e "/var/run/wpa_supplicant/$INTERFACE" ];
@@ -210,12 +234,12 @@
 			;;
 		esac
 		# Re-enable interface and restart network
-		sudo systemctl daemon-reload
-		sudo service dhcpcd force-reload
-		sudo ifup $INTERFACE
+		sudo systemctl daemon-reload >> /dev/null
+		sudo service dhcpcd force-reload >> /dev/null
+		sudo ifconfig $INTERFACE up >> /dev/null
 		sleep 2
-		sudo rm -rf /var/run/wpa_supplicant/$INTERFACE
-		sudo /etc/init.d/networking restart
+		sudo rm -rf /var/run/wpa_supplicant/$INTERFACE >> /dev/null
+		sudo /etc/init.d/networking restart >> /dev/null
 		sleep 2
 		testConnection
 		if [ $? -eq 0 ];
@@ -232,9 +256,9 @@
 
 	setIPNetwork() {
 		INTERFACE_FILE=/etc/network/interfaces.d/interfaces
-		# Scan interfaces
+		# Scan interfaces without "lo" interface
 		local counter=0
-		local LIST_INTERF=$(ls /sys/class/net)
+		local LIST_INTERF=$(ls /sys/class/net --hide="lo")
 		# Count all interface found
 		while IFS=' ' read -ra CUTTED_INTERF ; do
 			for i in "${CUTTED_INTERF[@]}"; do
@@ -280,7 +304,13 @@
 			fi
 			if [ -z "$CANCEL" ];
 			then
-				whiptail --yesno "What type of interface you selected?" --title "Set Network interface" --yes-button "Ethernet" --no-button "Wi-fi" 10 60 2
+				#whiptail --yesno "What type of interface you selected?" --title "Set Network interface" --yes-button "Ethernet" --no-button "Wi-fi" 10 60 2
+				
+				# Calculate if is standard ethernet or standard wifi
+				REGEX="eth*"
+				[[ $INTERFACE  =~ $REGEX ]]
+				# echo ${BASH_REMATCH[0]}
+				
 				if [ $? -eq 0 ];
 				then
 						writeConfigInterface 0
@@ -556,14 +586,19 @@
 					if [ $? -eq 0 ]; 
 					then
 
-						wget -q $URL_FILE_MENU -P "$SCRIPT_PATH""_new"
+						wget -q $URL_FILE_MENU -O "$SCRIPT_PATH""_new"
 						if [ -f "$SCRIPT_PATH""_new" ];
 						then
-							cp "$SCRIPT_PATH" "$SCRIPT_PATH""_old"
-							rm "$SCRIPT_PATH"
-							mv "$SCRIPT_PATH""_new" "$SCRIPT_PATH" 
-							chmod +x "$SCRIPT_PATH"
-							exec "$SCRIPT_PATH"
+							cp "$SCRIPT_PATH" "$SCRIPT_PATH""_old" 2> /dev/null
+							rm "$SCRIPT_PATH" 2> /dev/null
+							# create a backup of old menu
+							cp "$SCRIPT_PATH" "$BACKUP_DIR"/$MENU_FILE_NAME"_old"
+							# create a backup of new menu
+							cp "$SCRIPT_PATH""_new" "$BACKUP_DIR"/"$MENU_FILE_NAME"
+							# substitute a old menu with a new
+							mv "$SCRIPT_PATH""_new" "$SCRIPT_PATH" 2> /dev/null
+							chmod +x "$SCRIPT_PATH" 2> /dev/null
+							sudo exec "$SCRIPT_PATH"
 						fi
 					else
 						goToMainMenu
@@ -576,6 +611,27 @@
 			whiptail --msgbox "Update result: FAILED!\nNo active connection found!" --title "Update ERROR" 8 40 1
 		fi
 	goToMainMenu
+	}
+
+	restoreLastOldMenu() {
+		if [ -f $BACKUP_DIR/$MENU_FILE_NAME"_old" ];
+		then
+			VERSION_OLD= `cat $BACKUP_DIR/$MENU_FILE_NAME"_old" | grep "VERSION" | cut -d'=' -f2`
+			whiptail --yesno "Do you really restore old menu?\n"\
+			"\n"\
+			"    From           To\n"\
+			"  [v$VERSION] ---> [v$VERSION_OLD]" --title "Restore OLD Menu" 10 35 2
+				if [ $? -eq 0 ]; 
+				then
+					mv $BACKUP_DIR/$MENU_FILE_NAME"_old" $SCRIPT_PATH
+					rm $BACKUP_DIR/$MENU_FILE_NAME"_old"
+					cp "$SCRIPT_PATH" "$BACKUP_DIR"
+					sudo exec "$SCRIPT_PATH"
+				fi
+		else
+			whiptail --msgbox "Restore result: FAILED!\nProblem to found a old version file!" --title "Restore OLD menu" 8 40 1	
+		fi
+		goToMainMenu
 	}
 
 	info() {
@@ -659,9 +715,11 @@ Writed by: Sme.UP Spa"
 			;;
 			5 ) updateMenuVersion
 			;;
-			6 ) reset
+			6 ) restoreLastOldMenu
 			;;
-		7 ) info 
+			7 ) reset
+			;;
+			8 ) info 
 			;;
 			"1.1" ) setHostname
 			;;
@@ -677,6 +735,8 @@ Writed by: Sme.UP Spa"
 					whiptail --title "Test Connection" --msgbox "Result Test: FAILED!\nThe connection not work correctly." 8 78
 				fi
 				goToMainMenu
+			;;
+			"1.5" ) resetNetwork
 			;;
 			"2.1" ) setCrontab "sudo systemctl reboot"
 			;;
@@ -697,8 +757,9 @@ Writed by: Sme.UP Spa"
 					'3' 'Configure default URL for Chrome-kiosk' 
 					'4' 'Update system'
 					'5' 'Update this menu'
-					'6' 'Reset raspberry'
-					'7' 'Info'  
+					'6' 'Restore old version menu'
+					'7' 'Reset raspberry'
+					'8' 'Info'  
 					'0  ' 'Exit'
 				);
 				drawMenu "$MAIN_TIT" "${MAIN_ARR[@]}"
