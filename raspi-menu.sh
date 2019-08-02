@@ -56,7 +56,7 @@
 
 	# Check if the user is a root user
 	if [ "$(whoami)" != "root" ]; then
-			whiptail --title "No root user" --msgbox "Sorry you are not root. You must type: 'sudo <nameOfScript>' \nto restart this script." "$LINES" "$COLUMNS"
+			whiptail --title "No root user" --msgbox "Sorry you are not root. You must type: 'sudo <nameOfScript>' \nto restart this script." 8 40 2
 			exit
 	fi
 
@@ -113,20 +113,19 @@
 	setAutomaticWifi() {
 	if [ $(which wicd-curses) ];
 	then
-		whiptail --msgbox "After click on OK button, you can choose the Wifi from a list. \n
-		With the keyboard key '->' you will be able to set the parameters of the wifi interface. \n
-		With the keyboard key 'Q' you will be able to quit.
-		" "$LINES" "$COLUMNS"
+		whiptail --msgbox "After click on OK button, you can choose the Wifi from a list. \n"\
+		"With the keyboard key '->' you will be able to set the parameters of the wifi interface. \n"\
+		"With the keyboard key 'Q' you will be able to quit." 15 40 2
 		wicd-curses
 	else
-		whiptail --msgbox "Tool for set wifi automatically not-found (wicd-curses)." "$LINES" "$COLUMNS"
+		whiptail --msgbox "Tool for set wifi automatically not-found (wicd-curses)." 8 40 2
 	fi
 	goToMainMenu
 	}
 
 	setHostname() {
-		whiptail --msgbox "\
-				Please note: \ 
+		whiptail --msgbox 
+	"Please note:\n\n \ 
 	\nhostname's labels may contain only the ASCII letters from 'a' to 'z' (case-insensitive), the digits from '0' to '9', and the hypen '-'.\
 	\nHostname labels cannot begin or end with a hypen '-'. \
 	\nNO OTHER SYMBOLS, punctuation characters, or blank spaces are permitted.\
@@ -431,13 +430,13 @@
 		whiptail --yesno "Do you really want reset all scheduled tasks?" --title "Reset scheduled tasks" 8 40 2
 		RESP=$?
 		# if there are a crontab
-		sudo crontab -l >> /dev/null
+		sudo crontab -l > /dev/null
 		CRON_EXIT=$?
 		if [ $RESP -eq 0 ] && [ $CRON_EXIT -eq 0 ];
 		then
 			sudo crontab -r > /dev/null
 			RESET_CRON_EXIT=$?
-			sudo crontab -l >> /dev/null
+			sudo crontab -l > /dev/null
 			CRON_EXIT=$?
 			# If there aren't a crontab and the reset result ok
 			if [ $RESET_CRON_EXIT -eq 0 ] && [ $CRON_EXIT -eq 1 ];
