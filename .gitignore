@@ -10,3 +10,4 @@ local.properties
 .loadpath
 .recommenders
 .DS_Store
+.vscode
