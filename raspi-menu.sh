@@ -10,7 +10,15 @@
 	BACKUP_DIR=$BACKUP_DIR_PATH
 	SCRIPT_PATH=$MENU_SCRIPT_PATH
 	
+	if [ ! -z "$CURRENT_KIOSK_URL" ];
+	then
+		CURRENT_KIOSK_URL=$CURRENT_KIOSK_URL
+	else
+		CURRENT_KIOSK_URL="http://www.smeup.com"
+	fi
+	
 	OPENBOX_AUTOSTART=/etc/xdg/openbox/autostart
+	BOOT_SCRIPT_CONFIG=/boot/config.txt
 	BASH_PROFILE="$HOME"/.bash_profile
 	BASH_RC="$HOME"/.bashrc
 
@@ -24,10 +32,19 @@
 	}
 
 	createBackupFile() {
-		sudo mkdir -p "$BACKUP_DIR"
-		cp "$SCRIPT_PATH" "$BACKUP_DIR"
+		if [ ! -z "$BACKUP_DIR" ];
+		then
+			sudo mkdir -p "$BACKUP_DIR"
+			if [ $? -ne 0 ];
+			then
+				whiptail --title "Error!" --msgbox "Something was wrong and was not possible create a backup dir." 8 40 2
+				exit 1
+			fi
+		fi
+		cp "$SCRIPT_PATH" "$BACKUP_DIR"	
 		sudo cp "$OPENBOX_AUTOSTART" "$BACKUP_DIR"
 		sudo cp "$BASH_PROFILE" "$BACKUP_DIR"
+		sudo cp "$BOOT_SCRIPT_CONFIG" "$BACKUP_DIR"
 		sudo cp "$BASH_RC" "$BACKUP_DIR"
 		sudo cp "/etc/network/interfaces" "$BACKUP_DIR"
 		mkdir "$BACKUP_DIR"/interfaces.d
@@ -35,8 +52,8 @@
 		sudo cp "/etc/wpa_supplicant/wpa_supplicant.conf" "$BACKUP_DIR"
 		sudo cp "/etc/dhcpcd.conf" "$BACKUP_DIR"
 		sudo cp "/etc/hostname" "$BACKUP_DIR"
-		sudo cp "$HOME/scripts/$FILE_VARIATION_PKG" "$BACKUP_DIR"
-		sudo rm "$HOME/scripts/$FILE_VARIATION_PKG"
+		sudo cp "$SCRIPT_PATH/$FILE_VARIATION_PKG" "$BACKUP_DIR"
+		sudo rm "$SCRIPT_PATH/$FILE_VARIATION_PKG"
 	}
 
 	calc_windows_size() {
@@ -113,9 +130,9 @@
 	setAutomaticWifi() {
 	if [ $(which wicd-curses) ];
 	then
-		whiptail --msgbox "After click on OK button, you can choose the Wifi from a list. \n"\
-		"With the keyboard key '->' you will be able to set the parameters of the wifi interface. \n"\
-		"With the keyboard key 'Q' you will be able to quit." 15 40 2
+		whiptail --msgbox "After click on OK button, you can choose the Wifi from a list. \
+		\nWith the keyboard key '->' you will be able to set the parameters of the wifi interface. \
+		\nWith the keyboard key 'Q' you will be able to quit." 15 40 2
 		wicd-curses
 	else
 		whiptail --msgbox "Tool for set wifi automatically not-found (wicd-curses)." 8 40 2
@@ -485,19 +502,17 @@
 					sudo sed -i '/raspi-menu.sh/d' $OPENBOX_AUTOSTART 
 
 					# remove the last chromium's URL and add the correct one
-					CURRENT_URL="https://www.smeup.com"
-					SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_URL" 3>&1 1>&2 2>&3)
+					SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_KIOSK_URL" 3>&1 1>&2 2>&3)
 					sudo echo "SITE=$SITE" >> $OPENBOX_AUTOSTART
 					sudo echo 'chromium-browser --disable-features=site-per-process,TranslateUI,BlinkGenPropertyTrees,IsolateOrigins --disable-extensions --disable-popup-blocking --incognito --disable-infobars --disable-restore-session-state --disable-session-crashed-bubble --kiosk "$SITE" &' >> $OPENBOX_AUTOSTART
 					NEW_SITE=$SITE
 				else
 					# set the correct URL
-					CURRENT_URL="https://www.smeup.com"
 					unset SITE
 					
 					
 					while [ -z "$SITE" ]; do
-						SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_URL" 3>&1 1>&2 2>&3)
+						SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_KIOSK_URL" 3>&1 1>&2 2>&3)
 						if [ $? -eq 1 ];
 						then
 							CANCEL=1
@@ -531,6 +546,25 @@
 		else
 			whiptail --title "Error!" --msgbox "File $OPENBOX_AUTOSTART not found or not accessible." 8 40
 		fi
+		goToMainMenu
+	}
+
+	rotateMonitor() {
+		whiptail --title "Orientation" --radiolist \
+"Choose the screen orientation" 20 78 4 \
+"0" "Normal (0 degrees)" ON \
+"1" "Rotate of 90 degrees" OFF \
+"2" "Rotate of 180 degrees" OFF \
+"3" "Rotate of 270 degrees" OFF 
+		
+		ORIENTATION=$?
+		
+		if [ ! -z $ORIENTATION ];
+		then
+			echo "[Screen Rotation]\ndisplay_rotate=$ORIENTATION" >> $BOOT_SCRIPT_CONFIG
+		fi
+
+		whiptail --title "Info" --msgbox "Attention! For take changes raspberry must will reboot." 8 40
 		goToMainMenu
 	}
 
@@ -678,6 +712,7 @@ Writed by: Sme.UP Spa"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/autostart "$OPENBOX_AUTOSTART"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/.bash_profile "$BASH_PROFILE"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/.bashrc "$BASH_RC"
+				echo "yes" | sudo cp -rf "$BACKUP_DIR"/.config.txt "$BOOT_SCRIPT_CONFIG"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces "/etc/network/interfaces"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces.d/interfaces "/etc/network/interfaces.d/interfaces"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/wpa_supplicant.conf "/etc/wpa_supplicant/wpa_supplicant.conf"
@@ -710,15 +745,17 @@ Writed by: Sme.UP Spa"
 			;;
 			3 ) changeSiteURL
 			;;
-			4 ) updateSystem
+			4 ) rotateMonitor
 			;;
-			5 ) updateMenuVersion
+			5 ) updateSystem
 			;;
-			6 ) restoreLastOldMenu
+			6 ) updateMenuVersion
 			;;
-			7 ) reset
+			7 ) restoreLastOldMenu
 			;;
-			8 ) info 
+			8 ) reset
+			;;
+			9 ) info 
 			;;
 			"1.1" ) setHostname
 			;;
@@ -754,11 +791,12 @@ Writed by: Sme.UP Spa"
 					'1' 'Configure Network' 
 					'2' 'Configure scheduler' 
 					'3' 'Configure default URL for Chrome-kiosk' 
-					'4' 'Update system'
-					'5' 'Update this menu'
-					'6' 'Restore old version menu'
-					'7' 'Reset raspberry'
-					'8' 'Info'  
+					'4' 'Monitor orientation'
+					'5' 'Update system'
+					'6' 'Update this menu'
+					'7' 'Restore old version menu'
+					'8' 'Reset raspberry'
+					'9' 'Info'  
 					'0  ' 'Exit'
 				);
 				drawMenu "$MAIN_TIT" "${MAIN_ARR[@]}"
