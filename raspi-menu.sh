@@ -1,4 +1,6 @@
 	#! /bin/bash
+	source ./exportedEnv.sh
+
 
 	VERSION=0.0.2
 	USER=$SUDO_USER
@@ -8,7 +10,8 @@
 	URL_FILE_VERSION_MENU=$URL_FILE_VERSION_MENU
 	FILE_VARIATION_PKG=$FILE_VARIATION_PKG
 	BACKUP_DIR=$BACKUP_DIR_PATH
-	SCRIPT_PATH=$MENU_SCRIPT_PATH
+	SCRIPT_PATH_NAME=$MENU_SCRIPT_PATH
+	SCRIPT_DIR=$MENU_SCRIPT_DIR
 	
 	if [ ! -z "$CURRENT_KIOSK_URL" ];
 	then
@@ -41,7 +44,7 @@
 				exit 1
 			fi
 		fi
-		cp "$SCRIPT_PATH" "$BACKUP_DIR"	
+		cp "$SCRIPT_PATH_NAME" "$BACKUP_DIR"	
 		sudo cp "$OPENBOX_AUTOSTART" "$BACKUP_DIR"
 		sudo cp "$BASH_PROFILE" "$BACKUP_DIR"
 		sudo cp "$BOOT_SCRIPT_CONFIG" "$BACKUP_DIR"
@@ -52,8 +55,8 @@
 		sudo cp "/etc/wpa_supplicant/wpa_supplicant.conf" "$BACKUP_DIR"
 		sudo cp "/etc/dhcpcd.conf" "$BACKUP_DIR"
 		sudo cp "/etc/hostname" "$BACKUP_DIR"
-		sudo cp "$SCRIPT_PATH/$FILE_VARIATION_PKG" "$BACKUP_DIR"
-		sudo rm "$SCRIPT_PATH/$FILE_VARIATION_PKG"
+		sudo cp "$SCRIPT_DIR/$FILE_VARIATION_PKG" "$BACKUP_DIR"
+		sudo rm "$SCRIPT_DIR/$FILE_VARIATION_PKG"
 	}
 
 	calc_windows_size() {
@@ -608,7 +611,7 @@
 		testConnection
 		if [ $? -eq 0 ];
 		then
-			CURRENTVERSION=$(grep -m1 "VERSION=" "$SCRIPT_PATH")
+			CURRENTVERSION=$(grep -m1 "VERSION=" "$SCRIPT_PATH_NAME")
 			GITHUBVERSION=$(curl -s $URL_FILE_VERSION_MENU)
 			if [ $(echo $GITHUBVERSION | grep -i "VERSION=") ];
 			then
@@ -619,19 +622,19 @@
 					if [ $? -eq 0 ]; 
 					then
 
-						wget -q $URL_FILE_MENU -O "$SCRIPT_PATH""_new"
-						if [ -f "$SCRIPT_PATH""_new" ];
+						wget -q $URL_FILE_MENU -O "$SCRIPT_PATH_NAME""_new"
+						if [ -f "$SCRIPT_PATH_NAME""_new" ];
 						then
-							cp "$SCRIPT_PATH" "$SCRIPT_PATH""_old" 2> /dev/null
-							rm "$SCRIPT_PATH" 2> /dev/null
+							cp "$SCRIPT_PATH_NAME" "$SCRIPT_PATH_NAME""_old" 2> /dev/null
+							rm "$SCRIPT_PATH_NAME" 2> /dev/null
 							# create a backup of old menu
-							cp "$SCRIPT_PATH" "$BACKUP_DIR"/$MENU_FILE_NAME"_old"
+							cp "$SCRIPT_PATH_NAME" "$BACKUP_DIR"/$MENU_FILE_NAME"_old"
 							# create a backup of new menu
-							cp "$SCRIPT_PATH""_new" "$BACKUP_DIR"/"$MENU_FILE_NAME"
+							cp "$SCRIPT_PATH_NAME""_new" "$BACKUP_DIR"/"$MENU_FILE_NAME"
 							# substitute a old menu with a new
-							mv "$SCRIPT_PATH""_new" "$SCRIPT_PATH" 2> /dev/null
-							chmod +x "$SCRIPT_PATH" 2> /dev/null
-							sudo exec "$SCRIPT_PATH"
+							mv "$SCRIPT_PATH_NAME""_new" "$SCRIPT_PATH_NAME" 2> /dev/null
+							chmod +x "$SCRIPT_PATH_NAME" 2> /dev/null
+							sudo exec "$SCRIPT_PATH_NAME"
 						fi
 					else
 						goToMainMenu
@@ -656,10 +659,10 @@
 			"  [v$VERSION] ---> [v$VERSION_OLD]" --title "Restore OLD Menu" 10 35 2
 				if [ $? -eq 0 ]; 
 				then
-					mv $BACKUP_DIR/$MENU_FILE_NAME"_old" $SCRIPT_PATH
+					mv $BACKUP_DIR/$MENU_FILE_NAME"_old" $SCRIPT_PATH_NAME
 					rm $BACKUP_DIR/$MENU_FILE_NAME"_old"
-					cp "$SCRIPT_PATH" "$BACKUP_DIR"
-					sudo exec "$SCRIPT_PATH"
+					cp "$SCRIPT_PATH_NAME" "$BACKUP_DIR"
+					sudo exec "$SCRIPT_PATH_NAME"
 				fi
 		else
 			whiptail --msgbox "Restore result: FAILED!\nProblem to found a old version file!" --title "Restore OLD menu" 8 40 1	
@@ -805,7 +808,7 @@ Writed by: Sme.UP Spa"
 				whiptail --title "How find menu" --msgbox "If you configurated correctly the raspi this will change it in KIOSK MODE.\
 				\n\nNote: \
 				\nThis means that this configuration-tool will be hide, but you will can find it at \
-				\n   $SCRIPT_PATH \
+				\n   $SCRIPT_PATH_NAME \
 				\nTo run this menu you will must write \
 				\n   sudo ./raspi-menu.sh" 20 60 2
 				setExit
