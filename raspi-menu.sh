@@ -2,7 +2,7 @@
 	source ./exportedEnv.sh
 
 
-	VERSION=0.0.2
+	VERSION=0.0.3
 	USER=$SUDO_USER
 	HOME=/home/"$USER"
 	MENU_FILE_NAME=$MENU_FILE_NAME
