@@ -1,8 +1,8 @@
 	#! /bin/bash
-	source ./exportedEnv.sh
+	source $EXPORT_ENV_FILENAME
 
 
-	VERSION=0.0.3
+	VERSION=0.0.4
 	USER=$SUDO_USER
 	HOME=/home/"$USER"
 	MENU_FILE_NAME=$MENU_FILE_NAME
@@ -44,35 +44,20 @@
 				exit 1
 			fi
 		fi
-		cp "$SCRIPT_PATH_NAME" "$BACKUP_DIR"	
-		sudo cp "$OPENBOX_AUTOSTART" "$BACKUP_DIR"
-		sudo cp "$BASH_PROFILE" "$BACKUP_DIR"
-		sudo cp "$BOOT_SCRIPT_CONFIG" "$BACKUP_DIR"
-		sudo cp "$BASH_RC" "$BACKUP_DIR"
-		sudo cp "/etc/network/interfaces" "$BACKUP_DIR"
-		mkdir "$BACKUP_DIR"/interfaces.d
-		sudo cp "/etc/network/interfaces.d/interfaces" "$BACKUP_DIR"/interfaces.d
-		sudo cp "/etc/wpa_supplicant/wpa_supplicant.conf" "$BACKUP_DIR"
-		sudo cp "/etc/dhcpcd.conf" "$BACKUP_DIR"
-		sudo cp "/etc/hostname" "$BACKUP_DIR"
-		sudo cp "$SCRIPT_DIR/$FILE_VARIATION_PKG" "$BACKUP_DIR"
-		sudo rm "$SCRIPT_DIR/$FILE_VARIATION_PKG"
+		cp "$SCRIPT_PATH_NAME" "$BACKUP_DIR" >> /dev/null 2>&1	
+		sudo cp "$OPENBOX_AUTOSTART" "$BACKUP_DIR" >> /dev/null 2>&1
+		sudo cp "$BASH_PROFILE" "$BACKUP_DIR" >> /dev/null 2>&1
+		sudo cp "$BOOT_SCRIPT_CONFIG" "$BACKUP_DIR" >> /dev/null 2>&1
+		sudo cp "$BASH_RC" "$BACKUP_DIR" >> /dev/null 2>&1
+		sudo cp "/etc/network/interfaces" "$BACKUP_DIR" >> /dev/null 2>&1
+		mkdir "$BACKUP_DIR"/interfaces.d >> /dev/null 2>&1
+		sudo cp "/etc/network/interfaces.d/interfaces" "$BACKUP_DIR"/interfaces.d >> /dev/null 2>&1
+		sudo cp "/etc/wpa_supplicant/wpa_supplicant.conf" "$BACKUP_DIR" >> /dev/null 2>&1
+		sudo cp "/etc/dhcpcd.conf" "$BACKUP_DIR" >> /dev/null 2>&1
+		sudo cp "/etc/hostname" "$BACKUP_DIR" >> /dev/null 2>&1
+		sudo cp "$SCRIPT_DIR/$FILE_VARIATION_PKG" "$BACKUP_DIR" >> /dev/null 2>&1
+		sudo rm "$SCRIPT_DIR/$FILE_VARIATION_PKG" >> /dev/null 2>&1
 	}
-
-	calc_windows_size() {
-	LINES=17
-	COLUMNS=$(tput cols)
-
-	if [ -z "$COLUMNS" ] || [ "$COLUMNS" -lt 60 ]; then
-		COLUMNS=80
-	fi
-	if [ "$COLUMNS" -gt 178 ]; then
-		COLUMNS=120
-	fi
-	MENU_LINES=$((LINES-7))
-	}
-
-	calc_windows_size
 
 	# Check if the user is a root user
 	if [ "$(whoami)" != "root" ]; then
@@ -90,7 +75,7 @@
 		shift
 		local MENU_ITEM=("$@")
 		SEL=$(
-			whiptail --title "$TITLE" --menu "$SUB_TITLE" "$LINES" "$W_T_WIDTH" "$MENU_LINES" --cancel-button Finish --ok-button Select --clear "${MENU_ITEM[@]}" 3>&2 2>&1 1>&3
+			whiptail --title "$TITLE" --menu "$SUB_TITLE" 18 60 10 --cancel-button Finish --ok-button Select --clear "${MENU_ITEM[@]}" 3>&2 2>&1 1>&3
 		)
 		GLOBAL_SUB_TITLE=""
 	}
@@ -171,19 +156,31 @@
 		unset IP_ROUTER
 		unset IP_DNS
 		local IP_ADDR=$(whiptail --inputbox "Insert a CIDR IP address with a SUBNETMASK like 192.168.168.207/16" 8 78 --title "Insert static IP" 3>&1 1>&2 2>&3)
-		local IP_ROUTER=$(whiptail --inputbox "Insert RouterIP address \nNote: Nothing if don't want to set it." 8 78 --title "Insert router IP" 3>&1 1>&2 2>&3)
-		local IP_DNS=$(whiptail --inputbox "Insert the IP address for DNS, if are multiple DNS you can divide it by a space \" \"\nNote: Nothing if don't want to set it." 8 78 --title "Insert DNS IP" 3>&1 1>&2 2>&3)
-		echo "#-!-$INTERFACE-# \ninterface $INTERFACE" >> /etc/dhcpcd.conf
-		echo "#-!-$INTERFACE-# \nstatic ip_address=$IP_ADDR" >> /etc/dhcpcd.conf
-		
-		if [ ! -z $IP_ROUTER ];
+		if [ $? -eq 0 ];
 		then
-			echo "#-!-$INTERFACE-# \nstatic routers=$IP_ROUTER" >> /etc/dhcpcd.conf
+			local IP_ROUTER=$(whiptail --inputbox "Insert RouterIP address \nNote: Nothing if don't want to set it." 8 78 --title "Insert router IP" 3>&1 1>&2 2>&3)
+			if [ $? -eq 0 ];
+			then
+				local IP_DNS=$(whiptail --inputbox "Insert the IP address for DNS, if are multiple DNS you can divide it by a space \" \"\nNote: Nothing if don't want to set it." 8 78 --title "Insert DNS IP" 3>&1 1>&2 2>&3)
+				if [ $? -eq 0 ];
+				then
+
+					echo -e "#-!-$INTERFACE-# \ninterface $INTERFACE" >> /etc/dhcpcd.conf
+					echo -e "#-!-$INTERFACE-# \nstatic ip_address=$IP_ADDR" >> /etc/dhcpcd.conf
+				
+					if [ ! -z $IP_ROUTER ];
+					then
+						echo -e "#-!-$INTERFACE-# \nstatic routers=$IP_ROUTER" >> /etc/dhcpcd.conf
+					fi
+					if [ ! -z $IP_DNS ];
+					then
+						echo -e "#-!-$INTERFACE-# \nstatic domain_name_servers=$IP_DNS" >> /etc/dhcpcd.conf
+					fi
+				fi
+			fi
 		fi
-		if [ ! -z $IP_DNS ];
-		then
-			echo "#-!-$INTERFACE-# \nstatic domain_name_servers=$IP_DNS" >> /etc/dhcpcd.conf
-		fi
+		goToMainMenu
+			
 	}
 
 	addAutoInterface() {
@@ -253,12 +250,13 @@
 			;;
 		esac
 		# Re-enable interface and restart network
-		sudo systemctl daemon-reload >> /dev/null
-		sudo service dhcpcd force-reload >> /dev/null
-		sudo ifconfig $INTERFACE up >> /dev/null
+		whiptail --title "Set Network interface" --msgbox "Please Wait.....Raspberry's network will restarting soon." 8 78
+		sudo systemctl daemon-reload >> /dev/null 2>&1
+		sudo service dhcpcd force-reload >> /dev/null 2>&1
+		sudo ifconfig $INTERFACE up >> /dev/null 2>&1
 		sleep 2
-		sudo rm -rf /var/run/wpa_supplicant/$INTERFACE >> /dev/null
-		sudo /etc/init.d/networking restart >> /dev/null
+		sudo rm -rf /var/run/wpa_supplicant/$INTERFACE >> /dev/null 2>&1
+		sudo /etc/init.d/networking restart >> /dev/null 2>&1
 		sleep 2
 		testConnection
 		if [ $? -eq 0 ];
@@ -270,7 +268,7 @@
 	}
 
 	testConnection() {
-		ping -c 3 "www.google.com" 1>/dev/null
+		ping -c 3 "www.google.com" >> /dev/null 2>&1
 	}
 
 	setIPNetwork() {
@@ -311,7 +309,7 @@
 
 					# find and remove static IP if set
 					DHCPCD_FILE=/etc/dhcpcd.conf
-					grep "#-!-$INTERFACE-#" $DHCPCD_FILE > /dev/null
+					grep "#-!-$INTERFACE-#" $DHCPCD_FILE >> /dev/null 2>&1
 					if [ $? -eq 0 ];
 					then
 						sudo sed -i "/#-!-$INTERFACE-#/,+1 d" $DHCPCD_FILE
@@ -427,7 +425,7 @@
 	}
 
 	getCrontab() {
-		LIST_CRONTAB=$(sudo crontab -l)
+		LIST_CRONTAB=$(sudo crontab -l 2>/dev/null)
 		if [ $? -eq 0 ];
 		then
 			whiptail --msgbox "Please note: \
@@ -450,13 +448,13 @@
 		whiptail --yesno "Do you really want reset all scheduled tasks?" --title "Reset scheduled tasks" 8 40 2
 		RESP=$?
 		# if there are a crontab
-		sudo crontab -l > /dev/null
+		sudo crontab -l >> /dev/null 2>&1
 		CRON_EXIT=$?
 		if [ $RESP -eq 0 ] && [ $CRON_EXIT -eq 0 ];
 		then
-			sudo crontab -r > /dev/null
+			sudo crontab -r >> /dev/null 2>&1
 			RESET_CRON_EXIT=$?
-			sudo crontab -l > /dev/null
+			sudo crontab -l >> /dev/null 2>&1
 			CRON_EXIT=$?
 			# If there aren't a crontab and the reset result ok
 			if [ $RESET_CRON_EXIT -eq 0 ] && [ $CRON_EXIT -eq 1 ];
@@ -538,7 +536,7 @@
 				then
 					if [ "$NEW_SITE" == "$OLD_SITE" ];
 					then
-						whiptail --title "Error!" --msgbox "New site insered is the same that was stored." 8 40
+						whiptail --title "Error!" --msgbox "New site insered is the same that was stored. Kiosk-Mode NOT set." 8 40
 					else
 						whiptail --title "Activate URL Browser" --msgbox "URL Browser changed correctly and succesfull activated KIOSK MODE." 8 40
 					fi
@@ -581,7 +579,7 @@
 				while read -r line; do
 						i=$(( $i + 1 ))
 						echo $i
-				done < <(sudo apt -y update 2>/dev/null)
+				done < <(sudo apt -y update >> /dev/null 2>&1)
 			} | whiptail --title "Progress" --gauge "Please wait while system search updating" 6 60 0
 
 			{
@@ -590,7 +588,7 @@
 				while read -r line; do
 						i=$(( $i + 1 ))
 						echo $i
-				done < <(sudo apt -y upgrade 2>/dev/null)
+				done < <(sudo apt -y upgrade >> /dev/null 2>&1)
 			} | whiptail --title "Progress" --gauge "Please wait while system install update" 6 60 0
 
 	#		{
@@ -599,7 +597,7 @@
 	#			while read -r line; do
 	#					i=$(( i + 1 ))
 	#					echo $i
-	#			done < <(sudo rpi-update -y 2>/dev/null)
+	#			done < <(sudo rpi-update -y >> /dev/null 2>&1)
 	#		} | whiptail --title "Progress" --gauge "Please wait while updating your RPI firmware and kernel" 6 60 0
 		else
 			whiptail --msgbox "Update result: FAILED!\nNo active connection found!" --title "Update ERROR" 8 60 1
@@ -611,11 +609,12 @@
 		testConnection
 		if [ $? -eq 0 ];
 		then
-			CURRENTVERSION=$(grep -m1 "VERSION=" "$SCRIPT_PATH_NAME")
-			GITHUBVERSION=$(curl -s $URL_FILE_VERSION_MENU)
+			# The tr -d '[:space:]' is used to trim the string
+			CURRENTVERSION=$(grep -m1 "VERSION=" "$SCRIPT_PATH_NAME" | tr -d '[:space:]')
+			GITHUBVERSION=$(curl -s $URL_FILE_VERSION_MENU | tr -d '[:space:]')
 			if [ $(echo $GITHUBVERSION | grep -i "VERSION=") ];
 			then
-				if [ "$CURRENTVERSION" == "$GITHUBVERSION" ]; then
+				if [[ "$CURRENTVERSION" == "$GITHUBVERSION" ]]; then
 					whiptail --msgbox "Update result: OK!\nThe menu tool is up to date" --title "Update Menu" 8 40 1
 				else
 					whiptail --yesno "A new version of this tool is available, download it now?" --title "Update Menu" 8 40 2
@@ -625,15 +624,15 @@
 						wget -q $URL_FILE_MENU -O "$SCRIPT_PATH_NAME""_new"
 						if [ -f "$SCRIPT_PATH_NAME""_new" ];
 						then
-							cp "$SCRIPT_PATH_NAME" "$SCRIPT_PATH_NAME""_old" 2> /dev/null
-							rm "$SCRIPT_PATH_NAME" 2> /dev/null
+							cp "$SCRIPT_PATH_NAME" "$SCRIPT_PATH_NAME""_old" >> /dev/null 2>&1
+							rm "$SCRIPT_PATH_NAME" >> /dev/null 2>&1
 							# create a backup of old menu
 							cp "$SCRIPT_PATH_NAME" "$BACKUP_DIR"/$MENU_FILE_NAME"_old"
 							# create a backup of new menu
 							cp "$SCRIPT_PATH_NAME""_new" "$BACKUP_DIR"/"$MENU_FILE_NAME"
 							# substitute a old menu with a new
-							mv "$SCRIPT_PATH_NAME""_new" "$SCRIPT_PATH_NAME" 2> /dev/null
-							chmod +x "$SCRIPT_PATH_NAME" 2> /dev/null
+							mv "$SCRIPT_PATH_NAME""_new" "$SCRIPT_PATH_NAME" >> /dev/null 2>&1
+							chmod +x "$SCRIPT_PATH_NAME" >> /dev/null 2>&1
 							sudo exec "$SCRIPT_PATH_NAME"
 						fi
 					else
@@ -710,12 +709,12 @@ Writed by: Sme.UP Spa"
 		whiptail --yesno "Do you really want reset raspberry?" --title "Reset raspberry" 8 40 2
 		if [ $? -eq 0 ];
 		then
-			if [ -d "$BACKUP_DIR" ];
+			if [ -d "$BACKUP_DIR" ];>> /dev/null
 			then
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/autostart "$OPENBOX_AUTOSTART"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/.bash_profile "$BASH_PROFILE"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/.bashrc "$BASH_RC"
-				echo "yes" | sudo cp -rf "$BACKUP_DIR"/.config.txt "$BOOT_SCRIPT_CONFIG"
+				echo "yes" | sudo cp -rf "$BACKUP_DIR"/config.txt "$BOOT_SCRIPT_CONFIG"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces "/etc/network/interfaces"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/interfaces.d/interfaces "/etc/network/interfaces.d/interfaces"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/wpa_supplicant.conf "/etc/wpa_supplicant/wpa_supplicant.conf"
@@ -723,11 +722,11 @@ Writed by: Sme.UP Spa"
 				echo "yes" | sudo cp -rf "$BACKUP_DIR"/hostname "/etc/hostname"
 				
 				# Usato comando e non funzione di cancellazione per i whiptail che si porta dietro
-				sudo crontab -r > /dev/null
+				sudo crontab -r >> /dev/null 2>&1
 
 				# Delete lease for interfaces
-				sudo rm /var/lib/dhcp/*
-				sudo rm /var/lib/dhcpcd5/*
+				sudo rm /var/lib/dhcp/* >> /dev/null 2>&1
+				sudo rm /var/lib/dhcpcd5/* >> /dev/null 2>&1
 
 				whiptail --title "Reset Raspberry" --msgbox "Raspberry was correctly reset." 8 78
 			fi
