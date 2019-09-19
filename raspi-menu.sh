@@ -808,8 +808,9 @@ Writed by: Sme.UP Spa"
 				\n\nNote: \
 				\nThis means that this configuration-tool will be hide, but you will can find it at \
 				\n   $SCRIPT_PATH_NAME \
-				\nTo run this menu you will must write \
-				\n   sudo ./raspi-menu.sh" 20 60 2
+				\nTo run this menu you only will must write \
+				\n   menu \
+				\n or sudo bash $SCRIPT_PATH_NAME" 20 60 3
 				setExit
 			;;
 			* ) SEL="0  "
