@@ -569,6 +569,44 @@
 		goToMainMenu
 	}
 
+	changeUserPassword() {
+		unset PSWD
+		unset CANCEL
+		unset PSWD_CONFIRM
+		while [ -z "$PSWD" ]; do
+			PSWD=$(whiptail --inputbox "Please enter a valid password for $SUDO_USER user:" 20 60 3>&1 1>&2 2>&3)
+			if [ $? -eq 1 ];
+			then
+				CANCEL=1
+				break
+			elif [ -z "$PSWD" ];
+			then
+				whiptail --title "Error!" --msgbox "Password cannot be empty. Please try insert again."  8 40
+			fi
+		done
+
+		if [ -z "$CANCEL" ];
+		then
+			while [ -z "$PSWD_CONFIRM" ] || [ "$PSWD_CONFIRM" != "$PSWD"  ]; do
+				PSWD_CONFIRM=$(whiptail --inputbox "Please confirm previous password for $SUDO_USER user:" 20 60 3>&1 1>&2 2>&3)
+				if [ $? -eq 1 ];
+					then
+						CANCEL=1
+						break
+					else
+						if [[ "$PSWD" != "$PSWD_CONFIRM" ]] || [ -z "$PSWD_CONFIRM" ];
+						then
+							whiptail --title "Error!" --msgbox "Password cannot be different from previous. Please try insert again."  8 40
+						else
+							echo "$SUDO_USER:$PSWD_CONFIRM" | sudo chpasswd
+							whiptail --title "Password Changed!" --msgbox "Password was changed correctly"  8 40
+						fi
+				fi
+			done
+		fi
+		goToMainMenu
+	}
+
 	updateSystem() {
 	testConnection
 		if [ $? -eq 0 ];
@@ -749,15 +787,17 @@ Writed by: Sme.UP Spa"
 			;;
 			4 ) rotateMonitor
 			;;
-			5 ) updateSystem
+			4 ) changeUserPassword
 			;;
-			6 ) updateMenuVersion
+			6 ) updateSystem
 			;;
-			7 ) restoreLastOldMenu
+			7 ) updateMenuVersion
 			;;
-			8 ) reset
+			8 ) restoreLastOldMenu
 			;;
-			9 ) info 
+			9 ) reset
+			;;
+			10 ) info 
 			;;
 			"1.1" ) setHostname
 			;;
@@ -794,11 +834,12 @@ Writed by: Sme.UP Spa"
 					'2' 'Configure scheduler' 
 					'3' 'Configure default URL for Chrome-kiosk' 
 					'4' 'Monitor orientation'
-					'5' 'Update system'
-					'6' 'Update this menu'
-					'7' 'Restore old version menu'
-					'8' 'Reset raspberry'
-					'9' 'Info'  
+					'5' 'Change '"$SUDO_USER"' password'
+					'6' 'Update system'
+					'7' 'Update this menu'
+					'8' 'Restore old version menu'
+					'9' 'Reset raspberry'
+					'10' 'Info'  
 					'0  ' 'Exit'
 				);
 				drawMenu "$MAIN_TIT" "${MAIN_ARR[@]}"
@@ -808,8 +849,9 @@ Writed by: Sme.UP Spa"
 				\n\nNote: \
 				\nThis means that this configuration-tool will be hide, but you will can find it at \
 				\n   $SCRIPT_PATH_NAME \
-				\nTo run this menu you will must write \
-				\n   sudo ./raspi-menu.sh" 20 60 2
+				\nTo run this menu you only will must write \
+				\n   menu \
+				\n or sudo bash $SCRIPT_PATH_NAME" 20 60 3
 				setExit
 			;;
 			* ) SEL="0  "
