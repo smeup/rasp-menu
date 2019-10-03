@@ -806,7 +806,7 @@ Writed by: Sme.UP Spa"
 			;;
 			4 ) rotateMonitor
 			;;
-			4 ) changeUserPassword
+			5 ) changeUserPassword
 			;;
 			6 ) updateSystem
 			;;
