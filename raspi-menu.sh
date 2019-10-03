@@ -164,17 +164,17 @@
 				local IP_DNS=$(whiptail --inputbox "Insert the IP address for DNS, if are multiple DNS you can divide it by a space \" \"\nNote: Nothing if don't want to set it." 8 78 --title "Insert DNS IP" 3>&1 1>&2 2>&3)
 				if [ $? -eq 0 ];
 				then
-
-					echo -e "#-!-$INTERFACE-# \ninterface $INTERFACE" >> /etc/dhcpcd.conf
-					echo -e "#-!-$INTERFACE-# \nstatic ip_address=$IP_ADDR" >> /etc/dhcpcd.conf
+					echo -e "\n#-!-$INTERFACE-#"
+					echo "interface $INTERFACE" >> /etc/dhcpcd.conf
+					echo "static ip_address=$IP_ADDR" >> /etc/dhcpcd.conf
 				
 					if [ ! -z $IP_ROUTER ];
 					then
-						echo -e "#-!-$INTERFACE-# \nstatic routers=$IP_ROUTER" >> /etc/dhcpcd.conf
+						echo "static routers=$IP_ROUTER" >> /etc/dhcpcd.conf
 					fi
 					if [ ! -z $IP_DNS ];
 					then
-						echo -e "#-!-$INTERFACE-# \nstatic domain_name_servers=$IP_DNS" >> /etc/dhcpcd.conf
+						echo "static domain_name_servers=$IP_DNS" >> /etc/dhcpcd.conf
 					fi
 				fi
 			fi
@@ -312,7 +312,7 @@
 					grep "#-!-$INTERFACE-#" $DHCPCD_FILE >> /dev/null 2>&1
 					if [ $? -eq 0 ];
 					then
-						sudo sed -i "/#-!-$INTERFACE-#/,+1 d" $DHCPCD_FILE
+						sudo sed -i "/#-!-$INTERFACE-#/,+4 d" $DHCPCD_FILE
 					fi
 				
 				else
@@ -551,21 +551,40 @@
 	}
 
 	rotateMonitor() {
-		whiptail --title "Orientation" --radiolist \
-"Choose the screen orientation" 20 78 4 \
-"0" "Normal (0 degrees)" ON \
-"1" "Rotate of 90 degrees" OFF \
-"2" "Rotate of 180 degrees" OFF \
-"3" "Rotate of 270 degrees" OFF 
-		
-		ORIENTATION=$?
-		
-		if [ ! -z $ORIENTATION ];
+		grep "[Screen Rotation]" "$BOOT_SCRIPT_CONFIG"
+		if [ $? -eq 0 ];
 		then
-			echo "[Screen Rotation]\ndisplay_rotate=$ORIENTATION" >> $BOOT_SCRIPT_CONFIG
+			unset CANCEL
+			whiptail --yesno "Attention! The rotation is already set.\nClear and reinsert it?" 10 60 2
+			if [ $? -eq 0 ];
+			then
+				# find and remove rotation
+				sudo sed -i "/[Screen Rotation]/,+1 d" $BOOT_SCRIPT_CONFIG
+			else
+				CANCEL=1
+			fi
+		fi
+		
+
+
+		if [ -z "$CANCEL" ]; 
+		then
+			ORIENTATION=$(whiptail --title "Orientation" --menu "Choose the screen orientation" 25 78 16 \
+"0" "Normal (0 degrees)" \
+"1" "Rotate of 90 degrees" \
+"2" "Rotate of 180 degrees" \
+"3" "Rotate of 270 degrees")
+		
+			if [ $? -eq 0 ];
+			then
+				if [ ! -z $ORIENTATION ];
+				then
+					echo -e "[Screen Rotation]\ndisplay_rotate=$ORIENTATION" >> $BOOT_SCRIPT_CONFIG
+					whiptail --title "Info" --msgbox "Attention! To take changes raspberry must will reboot." 8 40
+				fi
+			fi
 		fi
 
-		whiptail --title "Info" --msgbox "Attention! For take changes raspberry must will reboot." 8 40
 		goToMainMenu
 	}
 
@@ -716,7 +735,7 @@ Writed by: Sme.UP Spa"
 	}
 
 	checkHowExit() {
-		whiptail --title "Reboot raspberry" --yesno "For take changes raspberry must will reboot. Would you like to reboot now?" 20 60 2
+		whiptail --title "Reboot raspberry" --yesno "To take changes raspberry must will reboot. Would you like to reboot now?" 20 60 2
 		if [ $? -eq 1 ];
 		then
 			sync
@@ -834,7 +853,7 @@ Writed by: Sme.UP Spa"
 					'2' 'Configure scheduler' 
 					'3' 'Configure default URL for Chrome-kiosk' 
 					'4' 'Monitor orientation'
-					'5' 'Change '"$SUDO_USER"' password'
+					'5' 'Change '"$SUDO_USER"' user password'
 					'6' 'Update system'
 					'7' 'Update this menu'
 					'8' 'Restore old version menu'
