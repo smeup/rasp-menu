@@ -551,37 +551,42 @@
 	}
 
 	rotateMonitor() {
-		grep "[Screen Rotation]" "$BOOT_SCRIPT_CONFIG"
+		unset CANCEL
+		grep "Screen Rotation" "$BOOT_SCRIPT_CONFIG" > /dev/null
 		if [ $? -eq 0 ];
 		then
-			unset CANCEL
 			whiptail --yesno "Attention! The rotation is already set.\nClear and reinsert it?" 10 60 2
 			if [ $? -eq 0 ];
 			then
 				# find and remove rotation
-				sudo sed -i "/[Screen Rotation]/,+1 d" $BOOT_SCRIPT_CONFIG
+				sudo sed -i "/Screen Rotation/,+1 d" $BOOT_SCRIPT_CONFIG
 			else
 				CANCEL=1
 			fi
 		fi
 		
-
-
 		if [ -z "$CANCEL" ]; 
 		then
-			ORIENTATION=$(whiptail --title "Orientation" --menu "Choose the screen orientation" 25 78 16 \
-"0" "Normal (0 degrees)" \
-"1" "Rotate of 90 degrees" \
-"2" "Rotate of 180 degrees" \
-"3" "Rotate of 270 degrees")
-		
-			if [ $? -eq 0 ];
+			ORIENTATION=$(whiptail --title "Orientation" --radiolist "Choose the screen orientation \n(with the space-bar)" 13 40 4 \
+			"A" "Normal 0 degrees" ON \
+			"B" "Rotate 90 degrees" OFF \
+			"C" "Rotate 180 degrees" OFF \
+			"D" "Rotate 270 degrees" OFF 3>&1 1>&2 2>&3)
+
+			if [ $? -eq 0 ] && [ ! -z $ORIENTATION ];
 			then
-				if [ ! -z $ORIENTATION ];
-				then
-					echo -e "[Screen Rotation]\ndisplay_rotate=$ORIENTATION" >> $BOOT_SCRIPT_CONFIG
-					whiptail --title "Info" --msgbox "Attention! To take changes raspberry must will reboot." 8 40
-				fi
+			case $ORIENTATION in
+				"A") ORIENTATION="0"
+				;;
+				"B") ORIENTATION="1"
+				;;
+				"C") ORIENTATION="2"
+				;;
+				"D") ORIENTATION="3"
+				;;
+			esac
+				echo -e "[Screen Rotation]\ndisplay_rotate=$ORIENTATION" >> $BOOT_SCRIPT_CONFIG
+				whiptail --title "Info" --msgbox "Attention! To take changes raspberry must will reboot." 8 40
 			fi
 		fi
 
