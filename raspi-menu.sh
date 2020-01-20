@@ -2,7 +2,7 @@
 	source $EXPORT_ENV_FILENAME
 
 
-	VERSION=0.0.4
+	VERSION=1.0.0
 	USER=$SUDO_USER
 	HOME=/home/"$USER"
 	MENU_FILE_NAME=$MENU_FILE_NAME
@@ -13,6 +13,7 @@
 	SCRIPT_PATH_NAME=$MENU_SCRIPT_PATH
 	SCRIPT_DIR=$MENU_SCRIPT_DIR
 	
+	# In case the URL for the Kiosk mode is not set use default
 	if [ ! -z "$CURRENT_KIOSK_URL" ];
 	then
 		CURRENT_KIOSK_URL=$CURRENT_KIOSK_URL
@@ -30,11 +31,11 @@
 	checkIfDoBackup() {
 		if [ ! -d "$BACKUP_DIR" ];
 		then
-		createBackupFile
+			createBackupFiles
 		fi
 	}
 
-	createBackupFile() {
+	createBackupFiles() {
 		if [ ! -z "$BACKUP_DIR" ];
 		then
 			sudo mkdir -p "$BACKUP_DIR"
@@ -65,6 +66,7 @@
 			exit
 	fi
 
+	# Used to return to main menu
 	goToMainMenu() {
 		SEL="<--- "
 	}
@@ -115,6 +117,7 @@
 		goToMainMenu
 	}
 
+	# Use a wicd-curses program to set the internet access.
 	setAutomaticWifi() {
 	if [ $(which wicd-curses) ];
 	then
@@ -164,7 +167,7 @@
 				local IP_DNS=$(whiptail --inputbox "Insert the IP address for DNS, if are multiple DNS you can divide it by a space \" \"\nNote: Nothing if don't want to set it." 8 78 --title "Insert DNS IP" 3>&1 1>&2 2>&3)
 				if [ $? -eq 0 ];
 				then
-					echo -e "\n#-!-$INTERFACE-#"
+					echo -e "\n#--$INTERFACE--#"
 					echo "interface $INTERFACE" >> /etc/dhcpcd.conf
 					echo "static ip_address=$IP_ADDR" >> /etc/dhcpcd.conf
 				
@@ -225,23 +228,23 @@
 
 		whiptail --yesno "How do you want to use your interface?" --title "Set Network interface" --yes-button "DHCP" --no-button "Static IP" 10 60 2
 		case $? in
-			0 ) 
+			0 ) # DHCP
 				addAutoInterface
 				addHotPlugInterface
 				writeDHCPStatusInterface "dhcp"
 				
-				if [ $TYPE_INTERFACE = 1 ];
+				if [ $TYPE_INTERFACE = 1 ]; # Interface 1 is Wifi
 				then
 					addWpaSupplicant
 					writeWpaSupplicant "${2}" "${3}"
 				fi
 			;;
-			1 )
+			1 ) # STATIC
 				addAutoInterface
 				addHotPlugInterface
 				writeDHCPStatusInterface "manual"
 				
-				if [ $TYPE_INTERFACE = 1 ];
+				if [ $TYPE_INTERFACE = 1 ]; # Interface 1 is Wifi
 				then	
 					addWpaSupplicant
 					writeWpaSupplicant "${2}" "${3}"
@@ -309,10 +312,10 @@
 
 					# find and remove static IP if set
 					DHCPCD_FILE=/etc/dhcpcd.conf
-					grep "#-!-$INTERFACE-#" $DHCPCD_FILE >> /dev/null 2>&1
+					grep "#--$INTERFACE--#" $DHCPCD_FILE >> /dev/null 2>&1
 					if [ $? -eq 0 ];
 					then
-						sudo sed -i "/#-!-$INTERFACE-#/,+4 d" $DHCPCD_FILE
+						sudo sed -i "/#--$INTERFACE--#/,+4 d" $DHCPCD_FILE
 					fi
 				
 				else
@@ -320,9 +323,7 @@
 				fi
 			fi
 			if [ -z "$CANCEL" ];
-			then
-				#whiptail --yesno "What type of interface you selected?" --title "Set Network interface" --yes-button "Ethernet" --no-button "Wi-fi" 10 60 2
-				
+			then				
 				# Calculate if is standard ethernet or standard wifi
 				REGEX="eth*"
 				[[ $INTERFACE  =~ $REGEX ]]
@@ -351,6 +352,7 @@
 						then
 							# Check if SSID is present in wpa_supplicant
 							grep "ssid=\"$SSID_NAME\"" /etc/wpa_supplicant/wpa_supplicant.conf
+							unset CANCEL
 							if [ $? -eq 0 ];
 							then
 								whiptail --yesno "SSID already configured!\n Do you want to reconfigure?" --title "Set Wifi" 10 60 2
@@ -366,6 +368,7 @@
 
 						if [ -z "$CANCEL" ];
 						then
+							unset CANCEL
 							PASSWORD=$(whiptail --inputbox "Insert a passphrase of Wi-fi" 8 78 --title "Set Network interface" 3>&1 1>&2 2>&3)
 							if [ $? -eq 1 ];
 							then
@@ -390,7 +393,7 @@
 
 	setCrontab() {
 		CMD=$1
-		if [ -z "$CMD" ];
+		if [ -z "$CMD" ]; # Crontab not set
 		then
 			CMD=$(whiptail --title "Set scheduled task" --inputbox "Please enter a valid task command: \
 			\nFor example: \
@@ -449,15 +452,15 @@
 		RESP=$?
 		# if there are a crontab
 		sudo crontab -l >> /dev/null 2>&1
-		CRON_EXIT=$?
-		if [ $RESP -eq 0 ] && [ $CRON_EXIT -eq 0 ];
+		CRON_ACTIVE=$?
+		if [ $RESP -eq 0 ] && [ $CRON_ACTIVE -eq 0 ];
 		then
 			sudo crontab -r >> /dev/null 2>&1
-			RESET_CRON_EXIT=$?
+			RESET_CRON_ACTIVE=$?
 			sudo crontab -l >> /dev/null 2>&1
-			CRON_EXIT=$?
+			CRON_ACTIVE=$?
 			# If there aren't a crontab and the reset result ok
-			if [ $RESET_CRON_EXIT -eq 0 ] && [ $CRON_EXIT -eq 1 ];
+			if [ $RESET_CRON_ACTIVE -eq 0 ] && [ $CRON_ACTIVE -eq 1 ];
 			then
 				whiptail --title "Reset scheduled tasks" --msgbox "Result Reset: OK!\nAll tasks was successfully reset." 8 78
 			else
@@ -506,6 +509,7 @@
 					SITE=$(whiptail --inputbox "Please enter a valid URL" 20 60 "$CURRENT_KIOSK_URL" 3>&1 1>&2 2>&3)
 					sudo echo "SITE=$SITE" >> $OPENBOX_AUTOSTART
 					sudo echo 'chromium-browser --disable-features=site-per-process,TranslateUI,BlinkGenPropertyTrees,IsolateOrigins --disable-extensions --disable-popup-blocking --incognito --disable-infobars --disable-restore-session-state --disable-session-crashed-bubble --kiosk "$SITE" &' >> $OPENBOX_AUTOSTART
+					
 					NEW_SITE=$SITE
 				else
 					# set the correct URL
@@ -527,8 +531,9 @@
 					if [ -z "$CANCEL" ];
 					then
 						NEW_SITE=$SITE
-						SITE=$(sed -e 's/[&\\/]/\\&/g; s/$/\\/' -e '$s/\\$//' <<<"$SITE")
-						sudo sed -i 's/^\(\s*SITE=\s*\).*/\1'\'$SITE\''/' $OPENBOX_AUTOSTART
+						SITE=$(sed -e 's/[&\\/]/\\&/g; s/$/\\/' -e '$s/\\$//' <<<"$SITE") # Remove unwanted characters
+						sudo sed -i 's/^\(\s*SITE=\s*\).*/\1'\'$SITE\''/' $OPENBOX_AUTOSTART # Save URL site
+						sudo sed -i 's/^\(\s*CURRENT_KIOSK_URL=\s*\).*/\1'\'$SITE\''/' $EXPORT_ENV_FILENAME # Save URL site in GLOBAL_VARS (used to lunch the refresh_browser)
 					fi
 				fi
 
@@ -552,7 +557,23 @@
 
 	rotateMonitor() {
 		unset CANCEL
-		grep "Screen Rotation" "$BOOT_SCRIPT_CONFIG" > /dev/null
+
+		# Different execution from raspberry type
+		if [ getRaspiVersion <= 3 ];
+		then
+			raspi_writeRotateMonitor
+		else
+			raspi4_writeRotateMonitor
+		fi
+
+		goToMainMenu
+	}
+
+	raspi_writeRotateMonitor(){
+		
+		# Check if is already set
+		grep "Screen Rotation" "$BOOT_SCRIPT_CONFIG" > /dev/null	
+		
 		if [ $? -eq 0 ];
 		then
 			whiptail --yesno "Attention! The rotation is already set.\nClear and reinsert it?" 10 60 2
@@ -589,8 +610,67 @@
 				whiptail --title "Info" --msgbox "Attention! To take changes raspberry must will reboot." 8 40
 			fi
 		fi
+	}
 
-		goToMainMenu
+	raspi4_writeRotateMonitor(){
+		
+		# Check if is already set
+		grep "Screen Rotation" "$OPENBOX_AUTOSTART" > /dev/null
+		
+		if [ $? -eq 0 ];
+		then
+			whiptail --yesno "Attention! The rotation is already set.\nClear and reinsert it?" 10 60 2
+			if [ $? -eq 0 ];
+			then
+				# find and remove rotation
+				sudo sed -i "/Screen Rotation/,+1 d" $OPENBOX_AUTOSTART
+			else
+				CANCEL=1
+			fi
+		fi
+		
+		if [ -z "$CANCEL" ]; 
+		then
+			unset DISPLAY_PORT
+			DISPLAY_PORT=$(whiptail --title "Display Port" --radiolist "Choose the display port to set\n(with the space-bar)" 13 40 4 \
+			"A" "VGA Display" ON \
+			"B" "HDMI-1 Display" OFF \
+			"C" "HDMI-2" OFF 3>&1 1>&2 2>&3)
+
+			if [ $? -eq 0 ] && [ ! -z $DISPLAY_PORT ];
+			then
+				case $DISPLAY_PORT in
+					"A") DISPLAY_PORT="VGA1"
+					;;
+					"B") DISPLAY_PORT="HDMI-1"
+					;;
+					"C") DISPLAY_PORT="HDMI-2"
+					;;
+				esac
+			
+				ORIENTATION=$(whiptail --title "Orientation" --radiolist "Choose the screen orientation \n(with the space-bar)" 13 40 4 \
+				"A" "Normal 0 degrees" ON \
+				"B" "Rotate 90 degrees" OFF \
+				"C" "Rotate 180 degrees" OFF \
+				"D" "Rotate 270 degrees" OFF 3>&1 1>&2 2>&3)
+
+				if [ $? -eq 0 ] && [ ! -z $ORIENTATION ];
+				then
+					case $ORIENTATION in
+						"A") ORIENTATION="normal"
+						;;
+						"B") ORIENTATION="left"
+						;;
+						"C") ORIENTATION="right"
+						;;
+						"D") ORIENTATION="inverted"
+						;;
+					esac
+					echo -e "[Screen Rotation]\nxrandr –output "$DISPLAY_PORT" –rotate $ORIENTATION" >> $BOOT_SCRIPT_CONFIG
+					whiptail --title "Info" --msgbox "Attention! To take changes raspberry must will reboot." 8 40
+				fi
+			fi
+		fi	
 	}
 
 	changeUserPassword() {
@@ -734,7 +814,7 @@
 	info() {
 	local MESSAGE="\
 Menu version: $VERSION\n\
-Writed by: Sme.UP Spa"
+Writted by: Sme.UP Spa"
 	whiptail --title "INFO" --msgbox "$MESSAGE" 10 30 1
 	goToMainMenu
 	}
@@ -796,7 +876,22 @@ Writed by: Sme.UP Spa"
 		goToMainMenu
 	}
 
+	getRaspiVersion(){
+		return $(cut -d " " -f 3 <<< cat "/proc/device-tree/model")
+	}
+
+    # TODO - Check if is already active
+	abilitateAndSetSwap(){
+		# Stop the process of swap
+		sudo dphys-swapfile swapoff
+		# Auto adjust the swap 2 times of the instant local ram
+		sudo dphys-swapfile setup
+		# Start the process of swap
+		sudo dphys-swapfile swapon
+	}
+
 	checkIfDoBackup
+	abilitateAndSetSwap
 	GLOBAL_SUB_TITLE=""
 	goToMainMenu
 
